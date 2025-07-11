@@ -1,12 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'; // Opsional untuk screen ini, tergantung state management Anda
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/vehicle.dart'; // Sesuaikan path
+import 'package:rental_mobil_app_flutter/core/constants/app_constants.dart';
+import 'package:rental_mobil_app_flutter/features/auth/providers/auth_controller_provider.dart';
+import 'package:rental_mobil_app_flutter/features/booking_management/domain/booking.dart';
+import 'package:rental_mobil_app_flutter/features/booking_management/providers/booking_providers.dart'
+    as booking_providers;
+import 'package:rental_mobil_app_flutter/features/customer_area/presentation/screens/customer_booking_detail_screen.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/models/vehicle.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/owner_vehicle_providers.dart'
+    as vehicle_providers;
 
-// Provider sederhana untuk state form (bisa juga pakai StatefulWidget state biasa)
-final bookingFormProvider = StateNotifierProvider.autoDispose<BookingFormNotifier, BookingFormData>((ref) {
-  return BookingFormNotifier();
-});
+// Helper untuk mengubah fileId menjadi URL gambar Appwrite
+String getFilePreviewUrl(String fileId) {
+  return 'https://cloud.appwrite.io/v1/storage/buckets/${AppConstants.vehicleImagesBucketId}/files/$fileId/view?project=${AppConstants.appwriteProjectId}';
+}
+
+/// Provider sederhana untuk state form (bisa juga pakai StatefulWidget state biasa)
+final bookingFormProvider =
+    StateNotifierProvider<BookingFormNotifier, BookingFormData>(
+      (ref) => BookingFormNotifier(),
+    );
 
 class BookingFormData {
   final DateTime? startDate;
@@ -72,16 +86,20 @@ class BookingFormNotifier extends StateNotifier<BookingFormData> {
   void setFullName(String name) {
     state = state.copyWith(fullName: name);
   }
+
   void setPhoneNumber(String phone) {
     state = state.copyWith(phoneNumber: phone);
   }
+
   void setEmail(String email) {
     state = state.copyWith(email: email);
   }
 
   void _calculatePrice(double pricePerDay) {
-    if (state.startDate != null && state.endDate != null && state.endDate!.isAfter(state.startDate!)) {
-      final days = state.endDate!.difference(state.startDate!).inDays + 1; // +1 karena hari awal dihitung
+    if (state.startDate != null &&
+        state.endDate != null &&
+        state.endDate!.isAfter(state.startDate!)) {
+      final days = state.endDate!.difference(state.startDate!).inDays + 1;
       final rental = days * pricePerDay;
       final taxes = rental * 0.1; // Asumsi pajak 10%
       state = state.copyWith(
@@ -90,41 +108,28 @@ class BookingFormNotifier extends StateNotifier<BookingFormData> {
         taxesAndFees: taxes,
         totalPrice: rental + taxes,
       );
-    } else {
-       state = state.copyWith(
-        numberOfDays: 0,
-        rentalPrice: 0,
-        taxesAndFees: 0,
-        totalPrice: 0,
-      );
     }
   }
 }
 
-
 class CustomerBookingFormScreen extends ConsumerStatefulWidget {
-  final Vehicle vehicle; // Mobil yang akan dibooking
-
+  final Vehicle vehicle;
   const CustomerBookingFormScreen({super.key, required this.vehicle});
 
   @override
-  ConsumerState<CustomerBookingFormScreen> createState() => _CustomerBookingFormScreenState();
+  ConsumerState<CustomerBookingFormScreen> createState() =>
+      _CustomerBookingFormScreenState();
 }
 
-class _CustomerBookingFormScreenState extends ConsumerState<CustomerBookingFormScreen> {
+class _CustomerBookingFormScreenState
+    extends ConsumerState<CustomerBookingFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final TextEditingController _fullNameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-
-  // Warna sesuai gambar
-  static const Color darkBackgroundColor = Color(0xFF1A2E1A);
-  static const Color primaryTextColor = Colors.white;
-  static const Color secondaryTextColor = Colors.white70;
-  static const Color fieldBackgroundColor = Color(0xFF253825); // Warna field input
-  static const Color accentButtonColor = Color(0xFF8BC34A);
-
-  final DateFormat _dateFormatter = DateFormat('MMMM d, yyyy');
+  DateTime? _startDate;
+  DateTime? _endDate;
+  bool _isLoading = false;
 
   @override
   void initState() {
@@ -135,18 +140,29 @@ class _CustomerBookingFormScreenState extends ConsumerState<CustomerBookingFormS
     _phoneController.text = formData.phoneNumber;
     _emailController.text = formData.email;
 
+    // Set tanggal jika ada
+    if (formData.startDate != null) {
+      _startDate = formData.startDate!;
+    }
+    if (formData.endDate != null) {
+      _endDate = formData.endDate!;
+    }
+
     // Listener untuk update state Riverpod saat text field berubah
     _fullNameController.addListener(() {
-      ref.read(bookingFormProvider.notifier).setFullName(_fullNameController.text);
+      ref
+          .read(bookingFormProvider.notifier)
+          .setFullName(_fullNameController.text);
     });
     _phoneController.addListener(() {
-      ref.read(bookingFormProvider.notifier).setPhoneNumber(_phoneController.text);
+      ref
+          .read(bookingFormProvider.notifier)
+          .setPhoneNumber(_phoneController.text);
     });
     _emailController.addListener(() {
       ref.read(bookingFormProvider.notifier).setEmail(_emailController.text);
     });
   }
-
 
   @override
   void dispose() {
@@ -160,177 +176,227 @@ class _CustomerBookingFormScreenState extends ConsumerState<CustomerBookingFormS
     final formData = ref.read(bookingFormProvider);
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: (isStartDate ? formData.startDate : formData.endDate) ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 1)), // Tidak bisa pilih tanggal kemarin
-      lastDate: DateTime.now().add(const Duration(days: 365)), // Batas 1 tahun ke depan
-      builder: (context, child) { // Kustomisasi tema DatePicker
-        return Theme(
-          data: ThemeData.dark().copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: accentButtonColor, // Warna header
-              onPrimary: Colors.black, // Warna teks di header
-              surface: darkBackgroundColor, // Warna background
-              onSurface: primaryTextColor, // Warna teks
-            ),
-            dialogBackgroundColor: const Color(0xFF121F12),
-          ),
-          child: child!,
-        );
-      },
+      initialDate: isStartDate
+          ? formData.startDate ?? DateTime.now()
+          : formData.endDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2025),
     );
+
     if (picked != null) {
       if (isStartDate) {
-        ref.read(bookingFormProvider.notifier).setStartDate(picked, widget.vehicle.rentalPricePerDay);
+        _startDate = picked;
+        ref
+            .read(bookingFormProvider.notifier)
+            .setStartDate(picked, widget.vehicle.rentalPricePerDay);
       } else {
-        // Validasi end date tidak boleh sebelum start date
-        if (formData.startDate != null && picked.isBefore(formData.startDate!)) {
+        if (_startDate != null && picked.isAfter(_startDate!)) {
+          _endDate = picked;
+          ref
+              .read(bookingFormProvider.notifier)
+              .setEndDate(picked, widget.vehicle.rentalPricePerDay);
+        } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('End date cannot be before start date.'), backgroundColor: Colors.orange),
+            const SnackBar(
+              content: Text(
+                'Tanggal akhir harus lebih besar dari tanggal awal',
+              ),
+              backgroundColor: Colors.red,
+            ),
           );
-          return;
         }
-        ref.read(bookingFormProvider.notifier).setEndDate(picked, widget.vehicle.rentalPricePerDay);
       }
+      setState(() {});
     }
   }
 
-  void _submitBooking() {
-    if (_formKey.currentState!.validate()) {
-      final formData = ref.read(bookingFormProvider);
-      if (formData.startDate == null || formData.endDate == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Please select start and end dates.'), backgroundColor: Colors.orange),
-        );
-        return;
-      }
-      // TODO: Implementasi logika submit booking ke Appwrite
-      print('Booking Requested:');
-      print('Car: ${widget.vehicle.name} (ID: ${widget.vehicle.id})');
-      print('Start Date: ${formData.startDate}');
-      print('End Date: ${formData.endDate}');
-      print('Full Name: ${formData.fullName}');
-      print('Phone: ${formData.phoneNumber}');
-      print('Email: ${formData.email}');
-      print('Total Price: \$${formData.totalPrice.toStringAsFixed(2)}');
+  Future<void> _submitBookingToAppwrite(BuildContext context) async {
+    if (!_formKey.currentState!.validate()) return;
 
-      // Navigasi ke halaman konfirmasi pembayaran atau tampilkan pesan
-      Navigator.of(context).pop(); // Kembali dulu dari form
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Booking request sent! You will be contacted for payment (Cash).'), backgroundColor: accentButtonColor),
+    setState(() => _isLoading = true);
+    try {
+      // 1. Dapatkan user ID
+      final user = await ref
+          .read(authControllerProvider.notifier)
+          .getCurrentUser();
+      if (user == null) {
+        throw Exception('User tidak terotentikasi');
+      }
+
+      // 2. Buat booking data
+      final bookingData = Booking(
+        userId: user.$id,
+        customerName: ref.read(bookingFormProvider).fullName,
+        customerPhone: ref.read(bookingFormProvider).phoneNumber,
+        customerEmail: ref.read(bookingFormProvider).email,
+        vehicleId: widget.vehicle.id!,
+        startDate: ref.read(bookingFormProvider).startDate!,
+        endDate: ref.read(bookingFormProvider).endDate!,
+        totalPrice: ref.read(bookingFormProvider).totalPrice,
+        status: 'pending_confirmation',
+        paymentMethod: 'cash',
       );
+
+      // 3. Buat booking di Appwrite
+      final bookingService = ref.read(booking_providers.bookingServiceProvider);
+      final bookingId = await bookingService.createBooking(bookingData, ref);
+
+      // 4. Update status kendaraan
+      final vehicleService = ref.read(vehicle_providers.vehicleServiceProvider);
+      await vehicleService.updateVehicleStatus(
+        widget.vehicle.id!,
+        'Not Available',
+      );
+
+      // 5. Navigasi ke detail booking
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) =>
+              CustomerBookingDetailScreen(bookingId: bookingId),
+        ),
+      );
+    } catch (e) {
+      // 6. Handle error
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    } finally {
+      setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final formData = ref.watch(bookingFormProvider); // Watch untuk update UI harga
-    final currencyFormatter = NumberFormat.currency(locale: 'en_US', symbol: '\$');
+    final formData = ref.watch(bookingFormProvider);
+    final currencyFormatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp',
+      decimalDigits: 0,
+    );
 
     return Scaffold(
-      backgroundColor: darkBackgroundColor,
+      backgroundColor: const Color(0xFF1A2E1A),
       appBar: AppBar(
-        backgroundColor: darkBackgroundColor,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: primaryTextColor),
-          onPressed: () => Navigator.of(context).pop(),
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            Navigator.pop(context);
+          },
         ),
-        title: const Text('Request booking', style: TextStyle(color: primaryTextColor, fontWeight: FontWeight.bold)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.help_outline, color: primaryTextColor),
-            onPressed: () {
-              // TODO: Tampilkan dialog bantuan atau info
-              print('Help button tapped');
-            },
-          ),
-        ],
+        title: const Text(
+          'Booking Mobil',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle('Your trip'),
-              _buildDateField('Start date', formData.startDate, () => _selectDate(context, true)),
-              const SizedBox(height: 16),
-              _buildDateField('End date', formData.endDate, () => _selectDate(context, false)),
-              const SizedBox(height: 24),
-
-              _buildSectionTitle('Your details'),
-              _buildTextField(label: 'Full name', controller: _fullNameController, hint: 'Enter your full name'),
-              const SizedBox(height: 16),
-              _buildTextField(label: 'Active phone number', controller: _phoneController, hint: 'Enter your phone number', keyboardType: TextInputType.phone),
-              const SizedBox(height: 16),
-              _buildTextField(label: 'Email', controller: _emailController, hint: 'Enter your email', keyboardType: TextInputType.emailAddress),
-              const SizedBox(height: 24),
-
-              _buildSectionTitle('Your car'),
-              _buildCarSummary(widget.vehicle, currencyFormatter),
-              const SizedBox(height: 16),
-
-              _buildPriceDetail('Rental price', formData.rentalPrice, currencyFormatter),
-              _buildPriceDetail('Taxes & fees', formData.taxesAndFees, currencyFormatter, isBold: false),
-              const Divider(color: Colors.white24, height: 24),
-              _buildPriceDetail('Total', formData.totalPrice, currencyFormatter, isTotal: true),
-
-              const SizedBox(height: 80), // Ruang untuk tombol
-            ],
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildSectionTitle('Detail Mobil'),
+                _buildCarSummary(widget.vehicle, currencyFormatter),
+                const SizedBox(height: 24),
+                _buildSectionTitle('Detail Penyewa'),
+                _buildTextField(
+                  label: 'Nama Lengkap',
+                  controller: _fullNameController,
+                  hint: 'Masukkan nama lengkap',
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  label: 'Nomor Telepon',
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  hint: 'Masukkan nomor telepon',
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  label: 'Email',
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  hint: 'Masukkan email',
+                ),
+                const SizedBox(height: 24),
+                _buildSectionTitle('Perjalanan Anda'),
+                _buildDateField(
+                  'Tanggal Mulai',
+                  _startDate,
+                  () => _selectDate(context, true),
+                ),
+                const SizedBox(height: 16),
+                _buildDateField(
+                  'Tanggal Selesai',
+                  _endDate,
+                  () => _selectDate(context, false),
+                ),
+                const SizedBox(height: 24),
+                _buildSectionTitle('Ringkasan Harga'),
+                _buildPriceDetail(
+                  'Harga Sewa',
+                  formData.rentalPrice.toInt(),
+                  currencyFormatter,
+                ),
+                _buildPriceDetail(
+                  'Pajak (10%)',
+                  formData.taxesAndFees.toInt(),
+                  currencyFormatter,
+                ),
+                _buildPriceDetail(
+                  'Total',
+                  formData.totalPrice.toInt(),
+                  currencyFormatter,
+                  isTotal: true,
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isLoading
+                        ? null
+                        : () => _submitBookingToAppwrite(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF8BC34A),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    child: _isLoading
+                        ? const CircularProgressIndicator(color: Colors.white)
+                        : const Text(
+                            'Lakukan Booking',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
-      bottomNavigationBar: Padding(
-        padding: EdgeInsets.only(left: 20.0, right: 20.0, bottom: MediaQuery.of(context).viewInsets.bottom + 20.0, top: 10.0),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: accentButtonColor,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30.0)),
-            textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          onPressed: _submitBooking,
-          child: const Text('Request Booking', style: TextStyle(color: darkBackgroundColor)),
         ),
       ),
     );
   }
 
   Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(color: primaryTextColor, fontSize: 20, fontWeight: FontWeight.bold),
-    );
-  }
-
-  Widget _buildDateField(String label, DateTime? date, VoidCallback onTap) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: secondaryTextColor, fontSize: 14)),
-        const SizedBox(height: 6),
-        InkWell(
-          onTap: onTap,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
-            decoration: BoxDecoration(
-              color: fieldBackgroundColor,
-              borderRadius: BorderRadius.circular(12.0),
-              border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5)
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  date != null ? _dateFormatter.format(date) : 'Select date',
-                  style: TextStyle(color: date != null ? primaryTextColor : secondaryTextColor.withOpacity(0.7), fontSize: 15),
-                ),
-                const Icon(Icons.calendar_today_outlined, color: secondaryTextColor, size: 20),
-              ],
-            ),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
           ),
         ),
+        const SizedBox(height: 8),
+        Container(height: 2, width: 40, color: const Color(0xFF8BC34A)),
+        const SizedBox(height: 16),
       ],
     );
   }
@@ -338,114 +404,186 @@ class _CustomerBookingFormScreenState extends ConsumerState<CustomerBookingFormS
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
+    TextInputType? keyboardType,
     String? hint,
-    TextInputType keyboardType = TextInputType.text,
-    String? Function(String?)? validator,
   }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(color: secondaryTextColor, fontSize: 14)),
-        const SizedBox(height: 6.0),
-        TextFormField(
-          controller: controller,
-          style: const TextStyle(color: primaryTextColor, fontSize: 15),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: secondaryTextColor.withOpacity(0.7), fontSize: 15),
-            filled: true,
-            fillColor: fieldBackgroundColor,
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12.0),
-              borderSide: BorderSide.none,
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white70),
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white38),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Colors.white38),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: Color(0xFF8BC34A)),
+        ),
+      ),
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return 'Harap isi kolom ini';
+        }
+        return null;
+      },
+    );
+  }
+
+  Widget _buildDateField(
+    String label,
+    DateTime? selectedDate,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.white38),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today, color: Colors.white70),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                selectedDate != null
+                    ? DateFormat('dd MMMM yyyy', 'id_ID').format(selectedDate)
+                    : 'Pilih $label',
+                style: const TextStyle(color: Colors.white, fontSize: 16),
+              ),
             ),
-             enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12.0),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2), width: 0.5),
-              ),
-              focusedBorder: OutlineInputBorder(
-                 borderRadius: BorderRadius.circular(12.0),
-                borderSide: BorderSide(color: accentButtonColor, width: 1.5),
-              ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
-          ),
-          keyboardType: keyboardType,
-          validator: validator ?? (value) {
-            if (value == null || value.isEmpty) {
-              return 'This field is required';
-            }
-            if (label.toLowerCase().contains('email') && !value.contains('@')) {
-                return 'Please enter a valid email';
-            }
-            return null;
-          },
+            Icon(Icons.arrow_forward_ios, color: Colors.white70, size: 16),
+          ],
         ),
-      ],
+      ),
     );
   }
 
-  Widget _buildCarSummary(Vehicle vehicle, NumberFormat formatter) {
-    return Row(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(8.0),
-          child: vehicle.imageUrls.isNotEmpty
-              ? Image.network(
-                  vehicle.imageUrls.first,
-                  width: 80,
-                  height: 60,
-                  fit: BoxFit.cover,
-                  errorBuilder: (c,e,s) => Container(width: 80, height: 60, color: Colors.black26, child: const Icon(Icons.image_not_supported, color: Colors.white30)),
-                )
-              : Container(
-                  width: 80,
-                  height: 60,
-                  color: Colors.black26,
-                  child: const Icon(Icons.directions_car, color: Colors.white30, size: 30),
-                ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                vehicle.name,
-                style: const TextStyle(color: primaryTextColor, fontSize: 16, fontWeight: FontWeight.bold),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              Text(
-                '${vehicle.year} • ${vehicle.capacity} seats', // Asumsi model Vehicle punya 'year'
-                style: const TextStyle(color: secondaryTextColor, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPriceDetail(String label, double value, NumberFormat formatter, {bool isBold = true, bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3.0),
+  Widget _buildPriceDetail(
+    String label,
+    int amount,
+    NumberFormat formatter, {
+    bool isTotal = false,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             label,
             style: TextStyle(
-              color: isTotal ? primaryTextColor : secondaryTextColor,
-              fontSize: isTotal ? 16 : 14,
-              fontWeight: isTotal ? FontWeight.bold : (isBold ? FontWeight.w500 : FontWeight.normal),
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
             ),
           ),
           Text(
-            formatter.format(value),
+            formatter.format(amount),
             style: TextStyle(
-              color: primaryTextColor,
-              fontSize: isTotal ? 18 : 15,
-              fontWeight: isTotal ? FontWeight.bold : (isBold ? FontWeight.w600 : FontWeight.normal),
+              color: isTotal ? const Color(0xFF8BC34A) : Colors.white,
+              fontSize: 16,
+              fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCarSummary(Vehicle vehicle, NumberFormat formatter) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF121F12),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Image.network(
+              getFilePreviewUrl(vehicle.image_urls.first),
+              width: 100,
+              height: 100,
+              fit: BoxFit.cover,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 100,
+                  height: 100,
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.error, color: Colors.red),
+                );
+              },
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  vehicle.name,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  vehicle.description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on,
+                      color: Colors.amber,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      vehicle.currentLocationCity,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Icon(Icons.money, color: Colors.white70, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      formatter.format(vehicle.rentalPricePerDay),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    const Text(
+                      '/hari',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         ],
@@ -453,38 +591,3 @@ class _CustomerBookingFormScreenState extends ConsumerState<CustomerBookingFormS
     );
   }
 }
-
-// Extension untuk capitalize string jika belum ada secara global
-extension StringExtension on String {
-  String capitalize() {
-    if (isEmpty) return this;
-    return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
-  }
-}
-
-// --- Untuk Menjalankan Contoh Ini di main.dart atau halaman sebelumnya ---
-/*
-// Misalkan dari CustomerVehicleDetailScreen, saat tombol "Rent Now" ditekan:
-Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => CustomerBookingFormScreen(
-      vehicle: currentlySelectedVehicleObject, // Kirim objek Vehicle yang dipilih
-    ),
-  ),
-);
-
-// ATAU jika ingin menjalankan langsung untuk tes UI:
-// di main.dart:
-// home: CustomerBookingFormScreen(
-//   vehicle: Vehicle( // Isi dengan data dummy Vehicle
-//     id: 'car-xyz',
-//     name: 'Mercedes-Benz C-Class',
-//     imageUrls: ['https://via.placeholder.com/300x200.png/5F9EA0/FFFFFF?Text=Mercedes'],
-//     rentalPricePerDay: 150,
-//     year: 2023, // Tambahkan atribut ini ke model Vehicle jika belum
-//     capacity: 4, // Tambahkan atribut ini ke model Vehicle jika belum
-//     // ... atribut lain yang dibutuhkan
-//   ),
-// ),
-*/

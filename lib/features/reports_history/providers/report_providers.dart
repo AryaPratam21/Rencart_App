@@ -34,13 +34,13 @@ final revenueDataProvider =
       totalRevenue: 2500.00,
       percentageChange: 15.0,
       weeklyBreakdown: [
-        DailyRevenueData(day: "Mon", revenue: 300),
-        DailyRevenueData(day: "Tue", revenue: 450),
-        DailyRevenueData(day: "Wed", revenue: 200),
-        DailyRevenueData(day: "Thu", revenue: 500),
-        DailyRevenueData(day: "Fri", revenue: 600),
-        DailyRevenueData(day: "Sat", revenue: 350),
-        DailyRevenueData(day: "Sun", revenue: 100),
+        DailyRevenueData(day: "Sen", revenue: 300),
+        DailyRevenueData(day: "Sel", revenue: 450),
+        DailyRevenueData(day: "Rab", revenue: 200),
+        DailyRevenueData(day: "Kam", revenue: 500),
+        DailyRevenueData(day: "Jum", revenue: 600),
+        DailyRevenueData(day: "Sab", revenue: 350),
+        DailyRevenueData(day: "Min", revenue: 100),
       ],
     );
   } else if (period == ReportPeriod.daily) {

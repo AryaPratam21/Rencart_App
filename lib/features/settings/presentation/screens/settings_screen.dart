@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rental_mobil_app_flutter/core/api/appwrite_providers.dart'; // Untuk data user & logout
 import 'package:rental_mobil_app_flutter/features/auth/presentation/screens/login_screen.dart'; // Untuk navigasi setelah logout
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/owner_vehicle_providers.dart';
+import 'package:rental_mobil_app_flutter/features/booking_management/providers/booking_providers.dart';
 
 // Provider untuk state switch notifikasi (contoh)
 final pushNotificationProvider =
@@ -24,15 +26,32 @@ final currentUserDetailProvider =
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
-  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+  /// Logout dari akun dan kembali ke LoginScreen
+  Future<void> logout(BuildContext context, WidgetRef ref) async {
     try {
       final account = ref.read(appwriteAccountProvider);
-      await account.deleteSession(sessionId: 'current');
+      try {
+        await account.deleteSession(sessionId: 'current');
+        debugPrint('[Logout] Session deleted successfully.');
+      } catch (e) {
+        debugPrint('[Logout] Error deleting session: ${e.toString()}');
+        // Tetap lanjutkan logout meski gagal hapus session
+      }
+      // Invalidate semua provider penting!
+      ref.invalidate(currentUserDetailProvider);
+      ref.invalidate(customerBookingsProvider);
+      ref.invalidate(availableVehiclesProvider);
+      // Tambahkan provider lain jika ada yang menyimpan data user/booking
+      ref.invalidate(bookingDetailProvider);
+      ref.invalidate(ownerBookingsProvider);
+      // Jika ada provider lain, tambahkan di sini
+      debugPrint('[Logout] Semua provider penting di-invalidate.');
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const LoginScreen()),
         (route) => false,
       );
     } catch (e) {
+      debugPrint('[Logout] ERROR: ${e.toString()}');
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Logout gagal: ${e.toString()}')),
@@ -43,145 +62,107 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final Color backgroundColor = Color(0xFF1A2E1A);
-    final Color cardColor = Color(0xFF2A402A); // Warna kartu/item
+    final Color cardColor = Color(0xFF2A402A);
     final Color textColor = Colors.white.withOpacity(0.9);
     final Color subTextColor = Colors.white.withOpacity(0.7);
-    final Color accentColor = Color(0xFF8BC34A); // Warna switch aktif
+    final Color accentColor = Color(0xFF8BC34A);
 
     final isPushEnabled = ref.watch(pushNotificationProvider);
     final isEmailEnabled = ref.watch(emailNotificationProvider);
     final currentUserAsyncValue = ref.watch(currentUserDetailProvider);
 
-    return Scaffold(
-      backgroundColor: backgroundColor,
-      appBar: AppBar(
-        backgroundColor: backgroundColor,
-        elevation: 0,
-        title: Text('Settings',
-            style: TextStyle(color: textColor, fontWeight: FontWeight.bold)),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-        children: [
-          _buildSectionTitle('Payment', textColor),
-          _buildSettingsItem(
-            context: context,
-            icon: Icons.account_balance,
-            iconBackgroundColor: cardColor, // Warna background ikon
-            iconColor: accentColor, // Warna ikon
-            title: 'Bank account',
-            subtitle: 'Bank of America', // Ini akan dinamis nanti
-            trailing:
-                Icon(Icons.arrow_forward_ios, size: 18, color: subTextColor),
-            onTap: () {
-              // Navigasi ke halaman detail/edit akun bank
-              print('Bank Account Tapped');
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                    content: Text('Bank Account Detail (Not Implemented)')),
-              );
-            },
-          ),
-          const SizedBox(height: 24.0),
-          _buildSectionTitle('Notifications', textColor),
-          _buildSwitchItem(
-            context: context,
-            icon: Icons.notifications_active_outlined,
-            iconBackgroundColor: cardColor,
-            iconColor: accentColor,
-            title: 'Push notifications',
-            subtitle:
-                'Receive notifications for new bookings, cancellations, and other',
-            value: isPushEnabled,
-            onChanged: (bool value) {
-              ref.read(pushNotificationProvider.notifier).state = value;
-              // TODO: Simpan preferensi ini ke Appwrite User Prefs atau Database
-              print('Push notifications: $value');
-            },
-          ),
-          const SizedBox(height: 12.0),
-          _buildSwitchItem(
-            context: context,
-            icon: Icons.email_outlined,
-            iconBackgroundColor: cardColor,
-            iconColor: accentColor,
-            title: 'Email notifications',
-            subtitle:
-                'Receive email notifications for new bookings, cancellations, and other',
-            value: isEmailEnabled,
-            onChanged: (bool value) {
-              ref.read(emailNotificationProvider.notifier).state = value;
-              // TODO: Simpan preferensi ini ke Appwrite User Prefs atau Database
-              print('Email notifications: $value');
-            },
-          ),
-          const SizedBox(height: 32.0),
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+      children: [
+        _buildSectionTitle('Payment', textColor),
+        _buildSettingsItem(
+          context: context,
+          icon: Icons.account_balance,
+          iconBackgroundColor: cardColor,
+          iconColor: accentColor,
+          title: 'Bank account',
+          subtitle: 'Bank of America',
+          trailing:
+              Icon(Icons.arrow_forward_ios, size: 18, color: subTextColor),
+          onTap: () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                  content: Text('Bank Account Detail (Not Implemented)')),
+            );
+          },
+        ),
+        const SizedBox(height: 24.0),
+        _buildSectionTitle('Notifications', textColor),
+        _buildSwitchItem(
+          context: context,
+          icon: Icons.notifications_active_outlined,
+          iconBackgroundColor: cardColor,
+          iconColor: accentColor,
+          title: 'Push notifications',
+          subtitle:
+              'Receive notifications for new bookings, cancellations, and other',
+          value: isPushEnabled,
+          onChanged: (bool value) {
+            ref.read(pushNotificationProvider.notifier).state = value;
+          },
+        ),
+        const SizedBox(height: 12.0),
+        _buildSwitchItem(
+          context: context,
+          icon: Icons.email_outlined,
+          iconBackgroundColor: cardColor,
+          iconColor: accentColor,
+          title: 'Email notifications',
+          subtitle:
+              'Receive email notifications for new bookings, cancellations, and other',
+          value: isEmailEnabled,
+          onChanged: (bool value) {
+            ref.read(emailNotificationProvider.notifier).state = value;
+          },
+        ),
+        const SizedBox(height: 32.0),
+        _buildSectionTitle('Account', textColor),
+        currentUserAsyncValue.when(
+          data: (user) {
+            if (user == null) return const SizedBox.shrink();
+            return Column(
+              children: [
+                _buildSettingsItem(
+                    context: context,
+                    icon: Icons.person_outline,
+                    iconBackgroundColor: cardColor,
+                    iconColor: accentColor,
+                    title: user.name.isNotEmpty ? user.name : 'User Profile',
+                    subtitle: user.email,
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Edit Profile (Not Implemented)')),
+                      );
+                    }),
+                const SizedBox(height: 12.0),
+                _buildSettingsItem(
+                    context: context,
+                    icon: Icons.lock_outline,
+                    iconBackgroundColor: cardColor,
+                    iconColor: accentColor,
+                    title: 'Change Password',
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                            content: Text('Change Password (Not Implemented)')),
+                      );
+                    }),
+              ],
+            );
+          },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, stack) => Text('Error loading user: $err',
+              style: TextStyle(color: Colors.redAccent)),
+        ),
+        const SizedBox(height: 24.0),
 
-          // Bagian Profil Dasar & Logout
-          _buildSectionTitle('Account', textColor),
-          currentUserAsyncValue.when(
-            data: (user) {
-              if (user == null)
-                return const SizedBox.shrink(); // Atau tampilkan pesan error
-              return Column(
-                children: [
-                  _buildSettingsItem(
-                      context: context,
-                      icon: Icons.person_outline,
-                      iconBackgroundColor: cardColor,
-                      iconColor: accentColor,
-                      title: user.name.isNotEmpty ? user.name : 'User Profile',
-                      subtitle: user.email,
-                      onTap: () {
-                        // Navigasi ke halaman edit profil jika ada
-                        print('Profile Tapped');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content: Text('Edit Profile (Not Implemented)')),
-                        );
-                      }),
-                  const SizedBox(height: 12.0),
-                  _buildSettingsItem(
-                      context: context,
-                      icon: Icons.lock_outline,
-                      iconBackgroundColor: cardColor,
-                      iconColor: accentColor,
-                      title: 'Change Password',
-                      onTap: () {
-                        print('Change Password Tapped');
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                              content:
-                                  Text('Change Password (Not Implemented)')),
-                        );
-                      }),
-                ],
-              );
-            },
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (err, stack) => Text('Error loading user: $err',
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-
-          const SizedBox(height: 24.0),
-          ElevatedButton.icon(
-            icon: Icon(Icons.logout, color: Colors.white.withOpacity(0.9)),
-            label: Text('Logout',
-                style: TextStyle(
-                    color: Colors.white.withOpacity(0.9),
-                    fontWeight: FontWeight.bold)),
-            onPressed: () => _logout(context, ref),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent.withOpacity(0.8),
-              padding: const EdgeInsets.symmetric(vertical: 14.0),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.0),
-              ),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 

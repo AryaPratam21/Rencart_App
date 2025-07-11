@@ -1,0 +1,598 @@
+// [KODE PERBAIKAN TOTAL]
+// Ganti seluruh isi file AddEditVehicleScreen.dart Anda dengan ini.
+import 'package:rental_mobil_app_flutter/features/auth/providers/auth_controller_provider.dart';
+import 'package:appwrite/appwrite.dart' as appwrite;
+import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:rental_mobil_app_flutter/core/constants/app_constants.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/models/vehicle.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/presentation/widgets/vehicle_image_preview.dart'; // Asumsi widget preview ada di sini
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/owner_vehicle_providers.dart'
+    as vehicle_providers;
+
+// Provider untuk loading state form ini
+final addEditVehicleLoadingProvider = StateProvider<bool>((ref) => false);
+
+class AddEditVehicleScreen extends ConsumerStatefulWidget {
+  final String? vehicleId;
+  final Vehicle? vehicle;
+
+  const AddEditVehicleScreen({super.key, this.vehicleId, this.vehicle});
+
+  @override
+  ConsumerState<AddEditVehicleScreen> createState() =>
+      _AddEditVehicleScreenState();
+}
+
+class _AddEditVehicleScreenState extends ConsumerState<AddEditVehicleScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _carNameController = TextEditingController();
+  final _plateNumberController = TextEditingController();
+  final _cityController = TextEditingController();
+  final _priceController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _locationController = TextEditingController();
+  final _latitudeController = TextEditingController();
+  final _longitudeController = TextEditingController();
+
+  String? _selectedStatus;
+  String? _selectedTransmission;
+  String? _selectedCapacity;
+  List<String> _existingImageUrls = [];
+  List<XFile> _newSelectedImages = [];
+  late final appwrite.Storage _storage;
+
+  @override
+  void initState() {
+    super.initState();
+    final client = ref.read(vehicle_providers.vehicleServiceProvider).client;
+    _storage = appwrite.Storage(client);
+    // Pastikan form hanya diisi jika benar-benar mode edit
+    if (widget.vehicle != null && widget.vehicleId != null) {
+      _initializeFormForEdit();
+    } else {
+      _selectedStatus = 'Tersedia';
+    }
+
+    // PATCH: Paksa fetch user jika belum ada
+    final authState = ref.read(authControllerProvider);
+    if (authState.user == null) {
+      Future.microtask(() async {
+        final user = await ref.read(authControllerProvider.notifier).getCurrentUser();
+        if (user == null) {
+          debugPrint('[ERROR] Tidak bisa mendapatkan user dari server');
+        } else {
+          debugPrint('[INFO] User berhasil didapatkan:  ${user.$id}');
+          if (mounted) setState(() {});
+        }
+      });
+    }
+  }
+
+  void _initializeFormForEdit() {
+    final v = widget.vehicle!;
+    _carNameController.text = v.name;
+    _plateNumberController.text = v.plate_number;
+    _cityController.text = v.currentLocationCity;
+    _priceController.text = v.rentalPricePerDay.toString();
+    _descriptionController.text = v.description;
+    _locationController.text = v.location;
+    _latitudeController.text = v.latitude.toString();
+    _longitudeController.text = v.longitude.toString();
+    _selectedStatus = v.status;
+    _selectedTransmission = v.transmission;
+    _selectedCapacity = v.capacity.toString();
+    _existingImageUrls = List.from(v.image_urls);
+  }
+
+  Future<void> _pickImages() async {
+    try {
+      final List<XFile> pickedFiles = await ImagePicker().pickMultiImage();
+      if (pickedFiles.isNotEmpty) {
+        setState(() {
+          _newSelectedImages.addAll(pickedFiles);
+        });
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    }
+  }
+
+  Future<List<String>> uploadImagesAndGetUrls(
+    List<XFile> images,
+    appwrite.Storage storage,
+    String userId,
+  ) async {
+    final imageUrls = <String>[];
+    for (final image in images) {
+      try {
+        appwrite.InputFile inputFile;
+        if (kIsWeb) {
+          final bytes = await image.readAsBytes();
+          debugPrint('[WEB UPLOAD] filename: [33m${image.name}[0m, bytes length: [36m${bytes.length}[0m');
+          if (bytes.isEmpty) {
+            print('[ERROR] File ${image.name} kosong, skip upload.');
+            continue;
+          }
+          inputFile = appwrite.InputFile.fromBytes(
+            bytes: bytes,
+            filename: image.name,
+            contentType: image.mimeType ?? 'image/jpeg',
+          );
+        } else {
+          inputFile = appwrite.InputFile(
+            filename: image.name,
+            path: image.path,
+            contentType: image.mimeType ?? 'image/jpeg',
+          );
+        }
+        final response = await storage.createFile(
+          bucketId: AppConstants.vehicleImagesBucketId,
+          fileId: appwrite.ID.unique(),
+          file: inputFile,
+          permissions: [
+            appwrite.Permission.read(appwrite.Role.any()), // WAJIB untuk preview publik
+            appwrite.Permission.write(appwrite.Role.user(userId)),
+          ],
+        );
+        imageUrls.add(response.$id);
+      } catch (e) {
+        print('Error uploading image: $e');
+      }
+    }
+    return imageUrls;
+  }
+
+  Future<void> _submitForm() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedCapacity == null || _selectedTransmission == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Silakan pilih kapasitas dan transmisi')),
+      );
+      return;
+    }
+
+    if (_existingImageUrls.isEmpty && _newSelectedImages.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Silakan tambahkan minimal 1 gambar')),
+      );
+      return;
+    }
+
+    setState(
+      () => ref.read(addEditVehicleLoadingProvider.notifier).state = true,
+    );
+
+    // Ambil user dari provider (tanpa validasi ribet)
+    final user = ref.read(authControllerProvider).user;
+
+    try {
+      final vehicleService = ref.read(vehicle_providers.vehicleServiceProvider);
+      // Upload gambar baru jika ada, gunakan fileId hasil upload
+      List<String> uploadedFileIds = [];
+      if (_newSelectedImages.isNotEmpty) {
+        uploadedFileIds = await uploadImagesAndGetUrls(_newSelectedImages, _storage, user?.$id ?? '');
+      }
+
+      // Gabungkan dengan gambar lama (jika mode edit)
+      final allImageUrls = [..._existingImageUrls, ...uploadedFileIds];
+
+      // Pastikan field image_urls pada Vehicle diisi allImageUrls
+      final updatedVehicle = Vehicle(
+        id: widget.vehicleId,
+        ownerId: user?.$id ?? '',
+        name: _carNameController.text,
+        plate_number: _plateNumberController.text,
+        rentalPricePerDay: double.tryParse(_priceController.text) ?? 0.0,
+        description: _descriptionController.text,
+        status: _selectedStatus ?? 'Tersedia',
+        transmission: _selectedTransmission ?? '',
+        capacity: int.tryParse(_selectedCapacity ?? '0') ?? 0,
+        currentLocationCity: _cityController.text,
+        location: _locationController.text,
+        latitude: double.tryParse(_latitudeController.text) ?? 0.0,
+        longitude: double.tryParse(_longitudeController.text) ?? 0.0,
+        image_urls: allImageUrls,
+      );
+      print('image_urls: [32m${updatedVehicle.image_urls}[0m');
+
+      if (widget.vehicleId != null) {
+        await vehicleService.updateVehicle(widget.vehicleId!, updatedVehicle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mobil berhasil diperbarui')),
+        );
+      } else {
+        await vehicleService.addVehicle(updatedVehicle, _newSelectedImages);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Mobil berhasil ditambahkan')),
+        );
+      }
+
+      if (mounted) {
+        Navigator.of(context).pop(true);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+    } finally {
+      if (mounted) {
+        setState(
+          () => ref.read(addEditVehicleLoadingProvider.notifier).state = false,
+        );
+      }
+    }
+  }
+
+  // Fungsi helper untuk generate URL dari fileId
+  String getAppwriteImageUrl(String fileId) {
+    return "${AppConstants.appwriteEndpoint}/storage/buckets/${AppConstants.vehicleImagesBucketId}/files/$fileId/view?project=${AppConstants.appwriteProjectId}";
+  }
+
+  @override
+  void dispose() {
+    _carNameController.dispose();
+    _plateNumberController.dispose();
+    _cityController.dispose();
+    _priceController.dispose();
+    _descriptionController.dispose();
+    _locationController.dispose();
+    _latitudeController.dispose();
+    _longitudeController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildImagePreview() {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        ..._existingImageUrls.map(
+          (fileId) => VehicleImagePreview(
+            imageUrl: getAppwriteImageUrl(fileId),
+            onRemove: () {
+              setState(() {
+                _existingImageUrls.remove(fileId);
+              });
+            },
+          ),
+        ),
+        ..._newSelectedImages.map(
+          (file) => VehicleImagePreview(
+            image: file,
+            onRemove: () {
+              setState(() {
+                _newSelectedImages.remove(file);
+              });
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEditMode = widget.vehicleId != null;
+    final isLoading = ref.watch(addEditVehicleLoadingProvider);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(isEditMode ? 'Edit Mobil' : 'Tambah Mobil'),
+        backgroundColor: const Color(0xFF1A2E1A),
+        elevation: 0,
+      ),
+      backgroundColor: const Color(0xFF1A2E1A),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(
+                controller: _carNameController,
+                decoration: InputDecoration(
+                  labelText: 'Nama Mobil',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                style: const TextStyle(color: Colors.white),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Nama mobil tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _plateNumberController,
+                decoration: InputDecoration(
+                  labelText: 'Nomor Polisi',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                style: const TextStyle(color: Colors.white),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Nomor polisi tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _cityController,
+                decoration: InputDecoration(
+                  labelText: 'Kota',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                style: const TextStyle(color: Colors.white),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Kota tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _priceController,
+                decoration: InputDecoration(
+                  labelText: 'Harga Sewa/Hari (Rp)',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Harga sewa tidak boleh kosong';
+                  }
+                  if (double.tryParse(value.trim()) == null) {
+                    return 'Masukkan angka yang valid';
+                  }
+                  if (double.parse(value.trim()) <= 0) {
+                    return 'Harga sewa harus lebih dari 0';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: InputDecoration(
+                  labelText: 'Deskripsi',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                maxLines: 3,
+                style: const TextStyle(color: Colors.white),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Deskripsi tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _locationController,
+                decoration: InputDecoration(
+                  labelText: 'Lokasi',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                style: const TextStyle(color: Colors.white),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Lokasi tidak boleh kosong';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextFormField(
+                      controller: _latitudeController,
+                      decoration: InputDecoration(
+                        labelText: 'Latitude',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[800],
+                      ),
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Latitude tidak boleh kosong';
+                        }
+                        if (double.tryParse(value.trim()) == null) {
+                          return 'Masukkan angka yang valid untuk latitude';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _longitudeController,
+                      decoration: InputDecoration(
+                        labelText: 'Longitude',
+                        labelStyle: const TextStyle(color: Colors.white70),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        filled: true,
+                        fillColor: Colors.grey[800],
+                      ),
+                      keyboardType: TextInputType.number,
+                      style: const TextStyle(color: Colors.white),
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) {
+                          return 'Longitude tidak boleh kosong';
+                        }
+                        if (double.tryParse(value.trim()) == null) {
+                          return 'Masukkan angka yang valid untuk longitude';
+                        }
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedStatus,
+                decoration: InputDecoration(
+                  labelText: 'Status',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Tersedia', child: Text('Tersedia')),
+                  DropdownMenuItem(value: 'Disewa', child: Text('Disewa')),
+                  DropdownMenuItem(
+                    value: 'Perawatan',
+                    child: Text('Perawatan'),
+                  ),
+                ],
+                onChanged: (value) => setState(() => _selectedStatus = value),
+                validator: (value) =>
+                    value == null ? 'Status tidak boleh kosong' : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedTransmission,
+                decoration: InputDecoration(
+                  labelText: 'Transmisi',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                items: const [
+                  DropdownMenuItem(value: 'Manual', child: Text('Manual')),
+                  DropdownMenuItem(value: 'Matic', child: Text('Matic')),
+                ],
+                onChanged: (value) =>
+                    setState(() => _selectedTransmission = value),
+                validator: (value) =>
+                    value == null ? 'Transmisi tidak boleh kosong' : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _selectedCapacity,
+                decoration: InputDecoration(
+                  labelText: 'Kapasitas (Kursi)',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                ),
+                items: const [
+                  DropdownMenuItem(value: '2', child: Text('2 Kursi')),
+                  DropdownMenuItem(value: '4', child: Text('4 Kursi')),
+                  DropdownMenuItem(value: '6', child: Text('6 Kursi')),
+                  DropdownMenuItem(value: '8', child: Text('8 Kursi')),
+                  DropdownMenuItem(value: '10', child: Text('10 Kursi')),
+                ],
+                onChanged: (value) => setState(() => _selectedCapacity = value),
+                validator: (value) =>
+                    value == null ? 'Kapasitas tidak boleh kosong' : null,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton.icon(
+                onPressed: _pickImages,
+                icon: const Icon(Icons.add_a_photo),
+                label: const Text('Tambah Gambar'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.white.withOpacity(0.9),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: const BorderSide(color: Colors.white, width: 1),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              _buildImagePreview(),
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 50,
+                child: ElevatedButton(
+                  onPressed: _submitForm,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white.withOpacity(0.9),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Colors.white, width: 1),
+                    ),
+                  ),
+                  child: isLoading
+                      ? const CircularProgressIndicator(
+                          color: Colors.black,
+                          strokeWidth: 2,
+                        )
+                      : Text(
+                          isEditMode ? 'Simpan Perubahan' : 'Tambah Mobil',
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

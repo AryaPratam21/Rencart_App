@@ -1,13 +1,15 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:rental_mobil_app_flutter/features/auth/presentation/screens/login_screen.dart'; // Sesuaikan path
-import 'package:rental_mobil_app_flutter/features/customer_area/presentation/screens/customer_home_screen.dart'; // Sesuaikan path
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:rental_mobil_app_flutter/features/auth/presentation/screens/login_screen.dart';
+import 'package:rental_mobil_app_flutter/features/auth/presentation/screens/customer/screens/customer_login_screen.dart'; // Ini untuk CustomerLoginScreen
 
-class WelcomeScreen extends StatelessWidget {
+
+class WelcomeScreen extends ConsumerWidget {
   const WelcomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
 
@@ -20,10 +22,6 @@ class WelcomeScreen extends StatelessWidget {
     const Color buttonTextColor = Colors.white;
     const Color termsTextColor = Colors.white70;
 
-    // URL Gambar Placeholder (ganti dengan aset Anda jika ada)
-    const String topImageUrl =
-        'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8NXx8Y2Fyc3xlbnwwfHwwfHw%3D&auto=format&fit=crop&w=800&q=60'; // Contoh gambar mobil
-
     return Scaffold(
       backgroundColor: backgroundColor,
       body: SafeArea(
@@ -32,29 +30,15 @@ class WelcomeScreen extends StatelessWidget {
           children: [
             // Bagian Gambar Atas
             Container(
-              height: screenHeight * 0.45, // Sekitar 45% tinggi layar
-              width: double.infinity,
-              decoration: const BoxDecoration(
-                // Anda bisa menggunakan Image.asset jika gambar ada di lokal
-                image: DecorationImage(
-                  image: NetworkImage(
-                      topImageUrl), // Ganti dengan NetworkImage atau AssetImage
-                  fit: BoxFit.cover,
-                ),
-                // Tambahkan gradient overlay jika ingin efek seperti di gambar
-                // gradient: LinearGradient(
-                //   begin: Alignment.topCenter,
-                //   end: Alignment.bottomCenter,
-                //   colors: [
-                //     Colors.transparent,
-                //     backgroundColor.withOpacity(0.3),
-                //     backgroundColor.withOpacity(0.8),
-                //     backgroundColor,
-                //   ],
-                //   stops: [0.0, 0.6, 0.8, 1.0],
-                // ),
-              ),
-            ),
+  height: screenHeight * 0.28,
+  width: double.infinity,
+  alignment: Alignment.center,
+  child: Image.asset(
+    'assets/Logo_Rencar.png',
+    height: screenHeight * 0.28,
+    fit: BoxFit.contain,
+  ),
+),
 
             Expanded(
               child: Padding(
@@ -85,8 +69,9 @@ class WelcomeScreen extends StatelessWidget {
                                     const LoginScreen()), // Arahkan ke Login Owner
                           );
                         },
-                        child: const Text('Login as Owner',
+                        child: const Text('Masuk sebagai Pemilik',
                             style: TextStyle(color: Colors.white)),
+
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -103,15 +88,16 @@ class WelcomeScreen extends StatelessWidget {
                               fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         onPressed: () {
-                          Navigator.pushReplacement(
+                          Navigator.push(
                             context,
                             MaterialPageRoute(
-                                builder: (context) =>
-                                    const CustomerHomeScreen()), // Langsung ke Customer Home
+                              builder: (context) => const CustomerLoginScreen(),
+                            ),
                           );
                         },
-                        child: const Text('Login as Customer',
+                        child: const Text('Masuk sebagai Penyewa',
                             style: TextStyle(color: buttonTextColor)),
+
                       ),
                     ),
                     const Spacer(), // Mendorong teks TOS ke bawah

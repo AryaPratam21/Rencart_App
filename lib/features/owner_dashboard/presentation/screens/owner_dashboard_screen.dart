@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rental_mobil_app_flutter/core/api/appwrite_providers.dart';
+import 'package:rental_mobil_app_flutter/features/auth/providers/auth_controller_provider.dart';
 import 'package:rental_mobil_app_flutter/features/booking_management/owner_area/presentation/screens/owner_booking_list_screen.dart';
 import 'package:rental_mobil_app_flutter/features/reports_history/presentation/screens/owner_reports_screen.dart';
 import 'package:rental_mobil_app_flutter/features/settings/presentation/screens/settings_screen.dart';
 import 'package:rental_mobil_app_flutter/features/vehicle_management/presentation/screens/owner_vehicle_list_screen.dart';
 
-import '../../../auth/presentation/screens/login_screen.dart'; // Untuk logout
+import '../../../auth/presentation/screens/welcome_screen.dart';
 
 // --- Provider untuk data summary (NANTI AKAN DIAMBIL DARI APPWRITE) ---
 // Untuk sekarang, kita buat provider dengan nilai statis agar UI bisa dibangun
@@ -27,13 +28,13 @@ class OwnerDashboardScreen extends ConsumerWidget {
       final account = ref.read(appwriteAccountProvider);
       await account.deleteSession(sessionId: 'current');
       Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         (route) => false,
       );
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Logout gagal: ${e.toString()}')),
+          SnackBar(content: Text('Gagal keluar: ${e.toString()}')),
         );
       }
     }
@@ -43,20 +44,16 @@ class OwnerDashboardScreen extends ConsumerWidget {
   // Anda perlu membuat halaman-halaman ini. Untuk sekarang bisa placeholder.
   Widget _getPageForIndex(int index) {
     switch (index) {
-      case 0: // Home/Dashboard
-        return _buildDashboardContent(); // Konten summary & features dashboard
-
-      case 1: // Cars (Car Management)
-        return const OwnerVehicleListScreen();
-
-      case 2: // Bookings
-        return const OwnerBookingListScreen();
-
-      case 3: // Profile/Settings
-        return const SettingsScreen(); // <-- UI SETTINGS ANDA
-
+      case 0:
+        return _buildDashboardContent(); // Dashboard dengan FeatureCard
+      case 1:
+        return OwnerVehicleListScreen();
+      case 2:
+        return OwnerBookingListScreen();
+      case 3:
+        return SettingsScreen();
       default:
-        return _buildDashboardContent(); // Default ke konten dashboard
+        return Container();
     }
   }
 
@@ -75,84 +72,92 @@ class OwnerDashboardScreen extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Summary',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold, color: Colors.white70),
-              ),
-              const SizedBox(height: 16.0),
-              Row(
-                children: [
-                  Expanded(
-                    child: _SummaryCard(
-                      title: 'Available Cars',
-                      value: availableCars.toString(),
-                    ),
-                  ),
-                  const SizedBox(width: 16.0),
-                  Expanded(
-                    child: _SummaryCard(
-                      title: 'Pending Bookings',
-                      value: pendingBookings.toString(),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16.0),
-              _SummaryCard(
-                title: "Today's Bookings",
-                value: todaysBookings.toString(),
-                isFullWidth: true,
-              ),
-              const SizedBox(height: 32.0),
-              Text(
-                'Features',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold, color: Colors.white70),
-              ),
-              const SizedBox(height: 16.0),
-              GridView.count(
-                crossAxisCount: 2,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisSpacing: 16.0,
-                mainAxisSpacing: 16.0,
-                childAspectRatio: 1.9,
-                children: [
-                  _FeatureCard(
-                    title: 'Car Management',
-                    icon: Icons.directions_car_filled,
-                    onTap: () {
-                      ref.read(bottomNavIndexProvider.notifier).state = 1;
-                    },
-                  ),
-                  _FeatureCard(
-                    title: 'Booking Management',
-                    icon: Icons.calendar_month,
-                    onTap: () {
-                      ref.read(bottomNavIndexProvider.notifier).state = 3;
-                    },
-                  ),
-                  _FeatureCard(
-                    title: 'Reports',
-                    icon: Icons.bar_chart,
-                    onTap: () {
-                      // Navigasi ke halaman laporan
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const OwnerReportsScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                  _FeatureCard(
-                    title: 'Settings',
-                    icon: Icons.settings,
-                    onTap: () {
-                      ref.read(bottomNavIndexProvider.notifier).state = 4;
-                    },
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ringkasan',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 16.0),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _SummaryCard(
+                              title: 'Mobil Tersedia',
+                              value: availableCars.toString(),
+                            ),
+                          ),
+                          const SizedBox(width: 16.0),
+                          Expanded(
+                            child: _SummaryCard(
+                              title: 'Pesanan Menunggu',
+                              value: pendingBookings.toString(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16.0),
+                      _SummaryCard(
+                        title: "Pesanan Hari Ini",
+                        value: todaysBookings.toString(),
+                        isFullWidth: true,
+                      ),
+                      const SizedBox(height: 32.0),
+                      Text(
+                        'Fitur',
+                        style: theme.textTheme.headlineSmall?.copyWith(
+                            fontWeight: FontWeight.bold, color: Colors.white70),
+                      ),
+                      const SizedBox(height: 16.0),
+                      GridView.count(
+                        crossAxisCount: 2,
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisSpacing: 16.0,
+                        mainAxisSpacing: 16.0,
+                        childAspectRatio: 0.9,
+                        children: [
+                          _FeatureCard(
+                            title: 'Manajemen Mobil',
+                            icon: Icons.directions_car_filled,
+                            onTap: () {
+                              ref.read(bottomNavIndexProvider.notifier).state = 1;
+                            },
+                          ),
+                          _FeatureCard(
+                            title: 'Manajemen Pesanan',
+                            icon: Icons.calendar_month,
+                            onTap: () {
+                              ref.read(bottomNavIndexProvider.notifier).state = 2;
+                            },
+                          ),
+                          _FeatureCard(
+                            title: 'Laporan',
+                            icon: Icons.bar_chart,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const OwnerReportsScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          _FeatureCard(
+                            title: 'Pengaturan',
+                            icon: Icons.settings,
+                            onTap: () {
+                              ref.read(bottomNavIndexProvider.notifier).state = 3;
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -163,6 +168,20 @@ class OwnerDashboardScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authControllerProvider).user;
+    final isLoading = ref.watch(authControllerProvider).isLoading;
+    // Inisialisasi user otomatis jika null
+    if (user == null && !isLoading) {
+      Future.microtask(() async {
+        await ref.read(authControllerProvider.notifier).getCurrentUser();
+      });
+    }
+    if (user == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     final int currentIndex = ref.watch(bottomNavIndexProvider);
     final Color appBarColor =
         Color(0xFF121F12); // Warna AppBar lebih gelap sedikit
@@ -173,16 +192,16 @@ class OwnerDashboardScreen extends ConsumerWidget {
       appBar: AppBar(
         backgroundColor: appBarColor,
         elevation: 0,
+        automaticallyImplyLeading:
+            currentIndex == 0, // <-- hanya Dashboard yang punya leading
         title: Text(
           currentIndex == 0
-              ? 'Dashboard'
+              ? 'Dasbor'
               : currentIndex == 1
-                  ? 'Car Management'
+                  ? 'Manajemen Mobil'
                   : currentIndex == 2
-                      ? 'Add New'
-                      : currentIndex == 3
-                          ? 'Bookings'
-                          : 'Profile',
+                      ? 'Pesanan'
+                      : 'Profil',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         leading: currentIndex == 0
@@ -194,13 +213,10 @@ class OwnerDashboardScreen extends ConsumerWidget {
                   },
                 ),
               )
-            : null,
-        // Hapus atau kosongkan actions:
-        // actions: [],
+            : null, // Tab lain tidak ada tombol back/menu
       ),
       drawer: currentIndex == 0 ? _buildDrawer(context, ref) : null,
-      body: _getPageForIndex(
-          currentIndex), // Menampilkan halaman sesuai tab yang dipilih
+      body: _getPageForIndex(currentIndex),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: currentIndex,
         onTap: (index) {
@@ -215,17 +231,17 @@ class OwnerDashboardScreen extends ConsumerWidget {
           BottomNavigationBarItem(
             icon: Icon(Icons.directions_car_outlined),
             activeIcon: Icon(Icons.directions_car),
-            label: 'Cars',
+            label: 'Mobil',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_today_outlined),
             activeIcon: Icon(Icons.calendar_today),
-            label: 'Bookings',
+            label: 'Pesanan',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             activeIcon: Icon(Icons.person),
-            label: 'Profile',
+            label: 'Profil',
           ),
         ],
         backgroundColor: appBarColor, // Warna latar belakang BottomNav
@@ -241,24 +257,19 @@ class OwnerDashboardScreen extends ConsumerWidget {
 
   // Widget untuk Drawer
   Widget _buildDrawer(BuildContext context, WidgetRef ref) {
-    final Color drawerHeaderColor = Color(0xFF121F12);
-    final Color drawerTextColor = Colors.white.withOpacity(0.9);
-    final Color drawerIconColor = Colors.white.withOpacity(0.7);
-
     return Drawer(
-      backgroundColor: Color(0xFF1A2E1A), // Warna latar belakang drawer
+      backgroundColor: Color(0xFF1A2E1A),
       child: ListView(
         padding: EdgeInsets.zero,
         children: <Widget>[
           DrawerHeader(
             decoration: BoxDecoration(
-              color: drawerHeaderColor,
+              color: Color(0xFF121F12),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // Anda bisa menambahkan logo atau gambar di sini
                 Text(
                   'Rental Mobil App',
                   style: TextStyle(
@@ -269,7 +280,7 @@ class OwnerDashboardScreen extends ConsumerWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Pemilik Dashboard', // Subtitle atau email pemilik
+                  'Pemilik Dashboard',
                   style: TextStyle(
                     color: Colors.white70,
                     fontSize: 14,
@@ -278,30 +289,17 @@ class OwnerDashboardScreen extends ConsumerWidget {
               ],
             ),
           ),
-          _buildDrawerItem(context, ref, Icons.dashboard, 'Dashboard', 0),
+          _buildDrawerItem(context, ref, Icons.dashboard, 'Dasbor', 0),
           _buildDrawerItem(
-              context, ref, Icons.directions_car, 'Car Management', 1),
+              context, ref, Icons.directions_car, 'Manajemen Mobil', 1),
           _buildDrawerItem(
-              context, ref, Icons.calendar_today, 'Booking Management', 3),
-          // Drawer item untuk Settings, buka halaman Settings tanpa mengubah tab
-          _buildDrawerItem(
-            context,
-            ref,
-            Icons.settings,
-            'Settings',
-            -1,
-            () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen()),
-              );
-            },
-          ),
+              context, ref, Icons.calendar_today, 'Manajemen Pesanan', 2),
+          _buildDrawerItem(context, ref, Icons.settings, 'Pengaturan', 3),
           Divider(color: Colors.white24),
           ListTile(
-            leading: Icon(Icons.logout, color: drawerIconColor),
-            title: Text('Logout', style: TextStyle(color: drawerTextColor)),
+            leading: Icon(Icons.logout, color: Colors.white.withOpacity(0.7)),
+            title: Text('Keluar',
+                style: TextStyle(color: Colors.white.withOpacity(0.9))),
             onTap: () => _logout(context, ref),
           ),
         ],
@@ -410,18 +408,20 @@ class _FeatureCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12.0),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(8.0), // lebih kecil
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(icon, size: 36.0, color: iconColor),
-              const SizedBox(height: 12.0),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(fontWeight: FontWeight.w600, color: titleColor),
+              Icon(icon, size: 28.0, color: iconColor), // lebih kecil
+              const SizedBox(height: 8.0),
+              Flexible(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600, color: titleColor),
+                ),
               ),
             ],
           ),

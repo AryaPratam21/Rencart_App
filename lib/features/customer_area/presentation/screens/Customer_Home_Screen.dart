@@ -1,25 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:rental_mobil_app_flutter/features/auth/presentation/screens/welcome_screen.dart'; // <-- Tambahkan import ini
-import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/vehicle.dart';
-import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/vehicle_providers.dart';
-import 'customer_booking_form_screen.dart';
-import 'customer_explore_screen.dart';
+import 'package:intl/intl.dart';
+import 'package:rental_mobil_app_flutter/features/auth/presentation/screens/welcome_screen.dart';
+import 'package:rental_mobil_app_flutter/features/customer_area/presentation/screens/customer_explore_screen.dart';
+import 'package:rental_mobil_app_flutter/features/customer_area/presentation/screens/customer_my_bookings_screen.dart';
+import 'package:rental_mobil_app_flutter/features/customer_area/presentation/screens/customer_vehicle_detail_screen.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/models/vehicle.dart';
+import 'package:rental_mobil_app_flutter/core/constants/app_constants.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/owner_vehicle_providers.dart'
+    as vehicle_providers;
+    
 
-class CustomerHomeScreen extends ConsumerWidget {
+String getFilePreviewUrl(String fileId) {
+  return 'https://cloud.appwrite.io/v1/storage/buckets/${AppConstants.vehicleImagesBucketId}/files/$fileId/view?project=${AppConstants.appwriteProjectId}';
+}
+
+class CustomerHomeScreen extends ConsumerStatefulWidget {
   const CustomerHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final vehiclesAsync = ref.watch(availableVehiclesProvider);
+  ConsumerState<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
+}
 
+class _CustomerHomeScreenState extends ConsumerState<CustomerHomeScreen> {
+  int _selectedIndex = 0;
+
+  final List<Widget> _pages = [
+    // Home
+    CustomerHomeContent(),
+    // Explore
+    CustomerExploreScreen(),
+    // Booking
+    CustomerBookingScreen(),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1A2E1A),
       appBar: AppBar(
+        automaticallyImplyLeading: false,
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: const Text(
-          'Rent a car',
+          'Sewa Mobil',
           style: TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -29,328 +53,267 @@ class CustomerHomeScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: Colors.redAccent, size: 28),
-            tooltip: 'Logout',
+            tooltip: 'Keluar',
             onPressed: () async {
-              // TODO: Tambahkan proses logout session/token jika ada
-              // Navigasi ke WelcomeScreen dan hapus semua route sebelumnya
-              Navigator.pushAndRemoveUntil(
+              Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const WelcomeScreen()),
-                (route) => false,
               );
             },
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-        children: [
-          const SizedBox(height: 8),
-          const Text(
-            'Rent a car',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 22,
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Search Bar
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF253825),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-            child: Row(
-              children: [
-                const Icon(Icons.search, color: Colors.white54),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    style: const TextStyle(color: Colors.white),
-                    decoration: const InputDecoration(
-                      hintText: 'Search',
-                      hintStyle: TextStyle(color: Colors.white54),
-                      border: InputBorder.none,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Featured cars',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 170,
-            child: vehiclesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => Center(
-                  child: Text('Error: $e',
-                      style: const TextStyle(color: Colors.red))),
-              data: (vehicles) => ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: vehicles.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 16),
-                itemBuilder: (context, index) {
-                  final vehicle = vehicles[index];
-                  return _FeaturedCarCard(vehicle: vehicle);
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Promotions',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF253825),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                  child: Image.network(
-                    'https://images.unsplash.com/photo-1461632830798-3adb3034e4c8?auto=format&fit=crop&w=600&q=80',
-                    height: 120,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Weekend Getaway',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Enjoy 20% off on all rentals this weekend.',
-                        style: TextStyle(color: Colors.white70, fontSize: 13),
-                      ),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF8BC34A),
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 22,
-                              vertical: 8,
-                            ),
-                          ),
-                          onPressed: () {},
-                          child: const Text('Book Now'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 28),
-          const Text(
-            'Browse by category',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          const SizedBox(height: 14),
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 12,
-            crossAxisSpacing: 12,
-            childAspectRatio: 2.3,
-            children: const [
-              _CategoryCard(
-                label: 'Sedans',
-                image: 'https://img.icons8.com/ios-filled/50/ffffff/sedan.png',
-              ),
-              _CategoryCard(
-                label: 'SUVs',
-                image: 'https://img.icons8.com/ios-filled/50/ffffff/suv.png',
-              ),
-              _CategoryCard(
-                label: 'Sports Cars',
-                image:
-                    'https://img.icons8.com/ios-filled/50/ffffff/sports-car.png',
-              ),
-              _CategoryCard(
-                label: 'Luxury Cars',
-                image:
-                    'https://img.icons8.com/ios-filled/50/ffffff/limousine.png',
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-        ],
-      ),
+      body: _pages[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         backgroundColor: const Color(0xFF121F12),
         selectedItemColor: Colors.white,
         unselectedItemColor: Colors.white54,
-        currentIndex: 0,
+        currentIndex: _selectedIndex,
         type: BottomNavigationBarType.fixed,
         onTap: (index) {
-          if (index == 1) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const CustomerExploreScreen(),
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
+          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Jelajah'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.book_online),
+            label: 'Pesanan',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Pisahkan konten Home agar tidak terjadi loop pada CustomerHomeScreen
+class CustomerHomeContent extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vehiclesAsync = ref.watch(
+      vehicle_providers.availableVehiclesProvider,
+    );
+
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(vehicle_providers.availableVehiclesProvider);
+      },
+      child: vehiclesAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text('Terjadi Kesalahan: $e')),
+        data: (vehicles) {
+          // Filter hanya menampilkan mobil yang tersedia
+          final availableVehicles = vehicles
+              .where((v) => v.status == 'Tersedia')
+              .toList();
+
+          if (availableVehicles.isEmpty) {
+            return const Center(
+              child: Text(
+                'Belum ada mobil tersedia untuk disewa.',
+                style: TextStyle(color: Colors.white70),
               ),
             );
           }
+          return ListView.builder(
+            itemCount: availableVehicles.length,
+            itemBuilder: (context, index) {
+              final vehicle = availableVehicles[index];
+              return _FeaturedCarCard(vehicle: vehicle);
+            },
+          );
         },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explore'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.book_online),
-              label: 'Booking'), // Ganti icon dan label
-        ],
       ),
     );
   }
 }
 
-class _FeaturedCarCard extends StatelessWidget {
+class _FeaturedCarCard extends ConsumerWidget {
   final Vehicle vehicle;
 
-  const _FeaturedCarCard({
-    required this.vehicle,
-  });
+  const _FeaturedCarCard({required this.vehicle});
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => CustomerBookingFormScreen(vehicle: vehicle),
-          ),
-        );
-      },
-      child: Container(
-        width: 150,
-        decoration: BoxDecoration(
-          color: const Color(0xFF203020),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        margin: const EdgeInsets.only(right: 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(16),
-                topRight: Radius.circular(16),
-              ),
-              child: Image.network(
-                vehicle.imageUrls.isNotEmpty ? vehicle.imageUrls.first : '',
-                height: 90,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-              child: Text(
-                vehicle.name,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 14,
-                ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                '\$${vehicle.rentalPricePerDay}/day',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.w400,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp',
+      decimalDigits: 0,
     );
-  }
-}
 
-class _CategoryCard extends StatelessWidget {
-  final String label;
-  final String image;
-
-  const _CategoryCard({
-    required this.label,
-    required this.image,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF253825),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Image.network(image, width: 28, height: 28, color: Colors.white),
-          const SizedBox(width: 10),
-          Text(
-            label,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
+        onTap: () {
+          // Pastikan vehicle id tidak null dan tidak kosong
+          if (vehicle.id == null || vehicle.id!.isEmpty) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Data mobil tidak lengkap'),
+                backgroundColor: Colors.red,
+              ),
+            );
+            return;
+          }
+
+          // Navigasi ke halaman detail
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  CustomerVehicleDetailScreen(vehicleId: vehicle.id!),
             ),
+          ).then((_) {
+            // Refresh data setelah kembali dari detail
+            ref.invalidate(vehicle_providers.availableVehiclesProvider);
+          });
+        },
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF253825),
+            borderRadius: BorderRadius.circular(16),
           ),
-        ],
+          child: Row(
+            children: [
+              Stack(
+                children: [
+                  Container(
+                    width: 100,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: vehicle.image_urls.isNotEmpty
+                          ? Image.network(
+                              getFilePreviewUrl(vehicle.image_urls.first),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                return Container(
+                                  width: 100,
+                                  height: 80,
+                                  color: Colors.grey[700],
+                                  child: const Icon(
+                                    Icons.error,
+                                    color: Colors.white54,
+                                    size: 30,
+                                  ),
+                                );
+                              },
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                    if (loadingProgress == null) return child;
+                                    return Container(
+                                      width: 100,
+                                      height: 80,
+                                      color: Colors.grey[700],
+                                      child: Center(
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white54,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                            )
+                          : Container(
+                              width: 100,
+                              height: 80,
+                              color: Colors.grey[700],
+                              child: const Icon(
+                                Icons.directions_car,
+                                color: Colors.white54,
+                                size: 30,
+                              ),
+                            ),
+                    ),
+                  ),
+                  if (vehicle.status != 'Tersedia')
+                    Positioned(
+                      top: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: vehicle.status == 'on_rent'
+                              ? Colors.red.withOpacity(0.9)
+                              : Colors.orange.withOpacity(0.9),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          vehicle.status == 'on_rent'
+                              ? 'Disewa'
+                              : 'Tidak Tersedia',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        vehicle.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        vehicle.description,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            formatter.format(vehicle.rentalPricePerDay),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            vehicle.currentLocationCity,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

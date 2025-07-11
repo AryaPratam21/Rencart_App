@@ -1,282 +1,346 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
-import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/vehicle.dart';
-import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/vehicle_providers.dart';
-// Import halaman detail jika sudah ada dan ingin digunakan
-// import 'customer_vehicle_detail_screen.dart';
+import 'package:rental_mobil_app_flutter/features/customer_area/presentation/screens/customer_vehicle_detail_screen.dart';
+import 'package:rental_mobil_app_flutter/features/customer_area/presentation/widgets/filter_dialogs.dart';
+import 'package:rental_mobil_app_flutter/features/customer_area/providers/filter_providers.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/owner_vehicle_providers.dart'
+    as vehicle_providers;
+import 'package:rental_mobil_app_flutter/core/constants/app_constants.dart';
 
-// Enum dan Provider untuk tab navigasi bawah
-enum ExplorePageTab { home, explore, booking }
-
-final explorePageTabProvider = StateProvider<ExplorePageTab>(
-    (ref) => ExplorePageTab.explore); // Default ke explore
+String getFilePreviewUrl(String fileId) {
+  return 'https://cloud.appwrite.io/v1/storage/buckets/${AppConstants.vehicleImagesBucketId}/files/$fileId/view?project=${AppConstants.appwriteProjectId}';
+}
 
 class CustomerExploreScreen extends ConsumerWidget {
   const CustomerExploreScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final vehiclesAsync = ref.watch(availableVehiclesProvider);
-    final activeTab = ref.watch(explorePageTabProvider);
+    final vehiclesAsync = ref.watch(
+      vehicle_providers.availableVehiclesProvider,
+    );
 
-    const Color darkBackgroundColor = Color(0xFF1A2E1A);
-    const Color appBarColor = Color(0xFF1A2E1A);
-    const Color cardBackgroundColor = Color(0xFF253825);
-    const Color primaryTextColor = Colors.white;
     const Color secondaryTextColor = Colors.white70;
     const Color filterChipColor = Color(0xFF2F4F2F);
     const Color filterChipTextColor = Colors.white;
-    const Color bottomNavBackgroundColor = Color(0xFF121F12);
-    const Color bottomNavActiveColor = Colors.white;
-    const Color bottomNavInactiveColor = Colors.white54;
+    const Color cardBackgroundColor = Color(0xFF253825);
+    const Color primaryTextColor = Colors.white;
 
-    final currencyFormatter =
-        NumberFormat.currency(locale: 'en_US', symbol: '\$');
-
-    Widget buildVehicleGrid() {
-      return vehiclesAsync.when(
-        data: (vehicles) {
-          if (vehicles.isEmpty) {
-            return const Center(
-              child: Text('No cars available matching your criteria.',
-                  style: TextStyle(color: secondaryTextColor, fontSize: 16),
-                  textAlign: TextAlign.center),
-            );
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(
-                16.0, 0, 16.0, 16.0), // Padding atas 0
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12.0,
-              mainAxisSpacing: 12.0,
-              childAspectRatio: 0.70,
-            ),
-            itemCount: vehicles.length,
-            itemBuilder: (context, index) {
-              final vehicle = vehicles[index];
-              return _CarCardExplore(
-                // Menggunakan widget kartu yang berbeda namanya untuk kejelasan
-                vehicle: vehicle,
-                formatter: currencyFormatter,
-                cardBackgroundColor: cardBackgroundColor,
-                primaryTextColor: primaryTextColor,
-                secondaryTextColor: secondaryTextColor,
-                onTap: () {
-                  print('Tapped on ${vehicle.name}');
-                  if ((vehicle.id ?? '').isNotEmpty) {
-                    // <-- perbaikan di sini
-                    // Navigator.push(
-                    //   context,
-                    //   MaterialPageRoute(
-                    //     builder: (_) => CustomerVehicleDetailScreen(vehicleId: vehicle.id!),
-                    //   ),
-                    // );
-                  } else {
-                    print("Error: Vehicle ID is empty or null.");
-                  }
-                },
-              );
-            },
-          );
-        },
-        loading: () => const Center(
-            child: CircularProgressIndicator(color: bottomNavActiveColor)),
-        error: (err, stack) => Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Text('Error: ${err.toString()}',
-                style: const TextStyle(color: Colors.redAccent),
-                textAlign: TextAlign.center),
-          ),
-        ),
-      );
-    }
-
-    Widget buildPlaceholderPage(String title) {
-      return Center(
-        child: Text('$title Page - Placeholder',
-            style: const TextStyle(fontSize: 18, color: primaryTextColor),
-            textAlign: TextAlign.center),
-      );
-    }
-
-    Widget currentPageContent;
-    switch (activeTab) {
-      case ExplorePageTab.explore:
-        currentPageContent = buildVehicleGrid();
-        break;
-      case ExplorePageTab.home:
-        // Kembali ke HomeScreen
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          Navigator.of(context).pop();
-        });
-        currentPageContent = const SizedBox.shrink();
-        break;
-      case ExplorePageTab.booking:
-        currentPageContent = buildPlaceholderPage("Booking");
-        break;
-    }
-
-    return Scaffold(
-      backgroundColor: darkBackgroundColor,
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: primaryTextColor),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text('Available cars',
-            style: TextStyle(
-                color: primaryTextColor,
-                fontSize: 18,
-                fontWeight: FontWeight.w500)),
-        backgroundColor: appBarColor,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(50.0),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16.0, 0, 16.0, 10.0),
-            child: Row(
-              children: [
-                Expanded(
-                    child: _FilterChipButtonExplore(
-                        label: 'Location',
-                        color: filterChipColor,
-                        textColor: filterChipTextColor,
-                        onTap: () => print("Location filter"))),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: _FilterChipButtonExplore(
-                        label: 'Car type',
-                        color: filterChipColor,
-                        textColor: filterChipTextColor,
-                        onTap: () => print("Car type filter"))),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: _FilterChipButtonExplore(
-                        label: 'Price',
-                        color: filterChipColor,
-                        textColor: filterChipTextColor,
-                        onTap: () => print("Price filter"))),
-              ],
-            ),
-          ),
-        ),
-      ),
-      body: currentPageContent,
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: activeTab.index,
-        onTap: (index) {
-          ref.read(explorePageTabProvider.notifier).state =
-              ExplorePageTab.values[index];
-        },
-        backgroundColor: bottomNavBackgroundColor,
-        selectedItemColor: bottomNavActiveColor,
-        unselectedItemColor: bottomNavInactiveColor,
-        selectedLabelStyle:
-            const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-        unselectedLabelStyle:
-            const TextStyle(fontWeight: FontWeight.w500, fontSize: 11),
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore), label: 'Explore'),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.book_online), label: 'Booking'),
-        ],
-      ),
+    final currencyFormatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp',
+      decimalDigits: 0,
     );
-  }
-}
 
-// Widget untuk kartu mobil (bisa diberi nama berbeda agar tidak konflik jika ada _CarCard lain)
-class _CarCardExplore extends StatelessWidget {
-  final Vehicle vehicle;
-  final NumberFormat formatter;
-  final VoidCallback onTap;
-  final Color cardBackgroundColor;
-  final Color primaryTextColor;
-  final Color secondaryTextColor;
+    // State untuk filter
+    final selectedLocation = ref.watch(selectedLocationProvider);
+    final selectedCarType = ref.watch(selectedCarTypeProvider);
 
-  const _CarCardExplore({
-    required this.vehicle,
-    required this.formatter,
-    required this.onTap,
-    required this.cardBackgroundColor,
-    required this.primaryTextColor,
-    required this.secondaryTextColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        decoration: BoxDecoration(
-          color: cardBackgroundColor,
-          borderRadius: BorderRadius.circular(16.0),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+    Widget buildFilterSection() {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 10.0),
+        child: Row(
           children: [
             Expanded(
-              flex: 3,
-              child: ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16.0)),
-                child: vehicle.imageUrls.isNotEmpty
-                    ? Image.network(
-                        vehicle.imageUrls.first,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) =>
-                            const Center(
-                                child: Icon(Icons.broken_image,
-                                    color: Colors.grey, size: 30)),
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                              child: CircularProgressIndicator(
-                                  strokeWidth: 2.0,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white70)));
-                        },
-                      )
-                    : Container(
-                        color: Colors.black26,
-                        child: const Icon(Icons.directions_car,
-                            size: 40, color: Colors.grey),
-                      ),
+              child: _FilterChipButtonExplore(
+                label: selectedLocation.isEmpty ? 'Lokasi' : selectedLocation,
+                color: filterChipColor,
+                textColor: filterChipTextColor,
+                onTap: () async {
+                  final result = await showDialog<String>(
+                    context: context,
+                    builder: (context) => LocationFilterDialog(),
+                  );
+                  if (result != null) {
+                    ref.read(selectedLocationProvider.notifier).state = result;
+                  }
+                },
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(10.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    vehicle.name,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: primaryTextColor,
-                    ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 4.0),
-                  Text(
-                    "${formatter.format(vehicle.rentalPricePerDay)}/day",
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: secondaryTextColor,
-                    ),
-                  ),
-                ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: _FilterChipButtonExplore(
+                label: selectedCarType.isEmpty ? 'Tipe Mobil' : selectedCarType,
+                color: filterChipColor,
+                textColor: filterChipTextColor,
+                onTap: () async {
+                  final result = await showDialog<String>(
+                    context: context,
+                    builder: (context) => CarTypeFilterDialog(),
+                  );
+                  if (result != null) {
+                    ref.read(selectedCarTypeProvider.notifier).state = result;
+                  }
+                },
               ),
             ),
           ],
         ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cari Mobil'),
+        backgroundColor: const Color(0xFF1F1F1F),
+      ),
+      backgroundColor: const Color(0xFF1F1F1F),
+      body: Column(
+        children: [
+          buildFilterSection(),
+          Expanded(
+            child: vehiclesAsync.when(
+              data: (vehicles) {
+                // Filter mobil berdasarkan status, lokasi, dan tipe mobil
+                final filteredVehicles = vehicles.where((v) {
+                  // Filter status
+                  if (v.status != 'Tersedia') return false;
+
+                  // Filter lokasi jika ada yang dipilih
+                  if (selectedLocation.isNotEmpty &&
+                      v.currentLocationCity.toLowerCase() !=
+                          selectedLocation.toLowerCase()) {
+                    return false;
+                  }
+
+                  // Filter tipe mobil jika ada yang dipilih
+                  if (selectedCarType.isNotEmpty &&
+                      v.transmission.toLowerCase() !=
+                          selectedCarType.toLowerCase()) {
+                    return false;
+                  }
+
+                  return true;
+                }).toList();
+
+                if (filteredVehicles.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.directions_car,
+                          size: 64,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Tidak ada mobil tersedia',
+                          style: TextStyle(color: Colors.white, fontSize: 18),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          selectedLocation.isNotEmpty ||
+                                  selectedCarType.isNotEmpty
+                              ? 'Coba ubah filter Anda'
+                              : 'Coba gunakan filter untuk menemukan mobil yang Anda inginkan',
+                          style: TextStyle(
+                            color: secondaryTextColor,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: filteredVehicles.length,
+                  itemBuilder: (context, index) {
+                    final vehicle = filteredVehicles[index];
+                    return Card(
+                      color: cardBackgroundColor,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: InkWell(
+                        onTap: () {
+                          // Pastikan vehicle id tidak null dan tidak kosong
+                          if (vehicle.id == null || vehicle.id!.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Data mobil tidak lengkap'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                            return;
+                          }
+
+                          // Navigasi ke halaman detail
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => CustomerVehicleDetailScreen(
+                                vehicleId: vehicle.id!,
+                              ),
+                            ),
+                          ).then((_) {
+                            // Refresh data setelah kembali dari detail
+                            ref.invalidate(
+                              vehicle_providers.availableVehiclesProvider,
+                            );
+                          });
+                        },
+                        child: Column(
+                          children: [
+                            // Gambar mobil
+                            Container(
+                              height: 150,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                image: DecorationImage(
+                                  image: vehicle.image_urls.isNotEmpty
+                                      ? NetworkImage(getFilePreviewUrl(vehicle.image_urls.first))
+                                      : const AssetImage(
+                                              'packages/cupertino_icons/assets/CupertinoIcons-1024.png',
+                                            )
+                                            as ImageProvider,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            // Informasi mobil
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Nama mobil dan harga
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          vehicle.name,
+                                          style: const TextStyle(
+                                            color: primaryTextColor,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${currencyFormatter.format(vehicle.rentalPricePerDay)}/hari',
+                                        style: const TextStyle(
+                                          color: primaryTextColor,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Lokasi dan deskripsi
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.location_on,
+                                        color: secondaryTextColor,
+                                        size: 16,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          vehicle.currentLocationCity,
+                                          style: TextStyle(
+                                            color: secondaryTextColor,
+                                            fontSize: 14,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  // Deskripsi singkat
+                                  Text(
+                                    vehicle.description,
+                                    style: TextStyle(
+                                      color: secondaryTextColor,
+                                      fontSize: 14,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Button Booking
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      // Pastikan vehicle id tidak null dan tidak kosong
+                                      if (vehicle.id == null ||
+                                          vehicle.id!.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Data mobil tidak lengkap',
+                                            ),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              CustomerVehicleDetailScreen(
+                                                vehicleId: vehicle.id!,
+                                              ),
+                                        ),
+                                      ).then((_) {
+                                        ref.invalidate(
+                                          vehicle_providers
+                                              .availableVehiclesProvider,
+                                        );
+                                      });
+                                    },
+                                    icon: const Icon(Icons.book),
+                                    label: const Text('Booking'),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF2F4F2F),
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stack) => Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.error, size: 64, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Error: ${error.toString()}',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => ref.invalidate(
+                        vehicle_providers.availableVehiclesProvider,
+                      ),
+                      child: const Text('Coba Lagi'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -313,9 +377,10 @@ class _FilterChipButtonExplore extends StatelessWidget {
               Text(
                 label,
                 style: TextStyle(
-                    color: textColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500),
+                  color: textColor,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(width: 4.0),
@@ -327,11 +392,3 @@ class _FilterChipButtonExplore extends StatelessWidget {
     );
   }
 }
-
-// Extension String jika belum ada di file utilitas global
-// extension StringExtension on String {
-//   String capitalize() {
-//     if (isEmpty) return this;
-//     return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
-//   }
-// }

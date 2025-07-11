@@ -1,4 +1,4 @@
-import 'package:appwrite/appwrite.dart'; // Untuk AppwriteException
+import 'package:appwrite/appwrite.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:rental_mobil_app_flutter/core/api/appwrite_providers.dart'; // Sesuaikan path
@@ -21,40 +21,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
 
   Future<void> _loginUser() async {
-    if (_formKey.currentState!.validate()) {
-      ref.read(loginLoadingProvider.notifier).state = true; // Set loading true
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    ref.read(loginLoadingProvider.notifier).state = true;
+    try {
+      final account = ref.read(appwriteAccountProvider);
+
       try {
-        final account = ref.read(appwriteAccountProvider);
-        await account.createEmailPasswordSession(
-          email: _emailController.text.trim(),
-          password: _passwordController.text.trim(),
+        await account.deleteSession(sessionId: 'current');
+      } catch (_) {}
+
+      await account.createEmailPasswordSession(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const OwnerDashboardScreen()),
         );
-
-        // Opsional: Ambil data user jika diperlukan langsung di sini
-        // final user = await account.get();
-        // print('Login berhasil untuk: ${user.name}');
-
-        // Navigasi ke Dashboard setelah login berhasil
-        if (mounted) {
-          // Pastikan widget masih ada di tree
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(builder: (_) => const OwnerDashboardScreen()),
-          );
-        }
-      } on AppwriteException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(e.message ?? 'Login gagal. Silakan coba lagi.'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      } finally {
-        if (mounted) {
-          ref.read(loginLoadingProvider.notifier).state =
-              false; // Set loading false
-        }
+      }
+    } on AppwriteException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content:
+                  Text('Login gagal: ${e.message ?? "Error tidak diketahui"}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        ref.read(loginLoadingProvider.notifier).state = false;
       }
     }
   }

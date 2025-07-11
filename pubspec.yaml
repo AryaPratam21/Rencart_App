@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0' # Disesuaikan untuk mendukung versi Dart yang lebih baru
+  sdk: '>=3.8.0 <4.0.0' # Disesuaikan untuk mendukung versi Dart yang lebih baru
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -30,23 +30,23 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8 # Versi ini umumnya stabil, bisa dicek jika ada yang lebih baru yang kompatibel
-
-  # Appwrite SDK untuk interaksi dengan backend Appwrite
-  appwrite: ^17.0.0
-
-  # State management menggunakan Riverpod
+  appwrite: ^17.0.1
+  image: ^4.1.0
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  google_maps_flutter: ^2.6.0
+  geocoding: ^4.0.0
   flutter_riverpod: ^2.6.1
-
   image_picker: ^1.1.2
-
-  # Untuk internasionalisasi dan lokalisasi (formatting tanggal, angka, dll.)
+  image_picker_web: ^3.0.0
   intl: ^0.20.2
-
-  fl_chart: ^0.64.0
+  fl_chart: ^1.0.0
+  shared_preferences: ^2.2.2
+  permission_handler: ^11.0.1
+  cached_network_image: ^3.3.0
+  url_launcher: ^6.2.2
+  dotted_border: ^2.1.0
 
 dev_dependencies:
   flutter_test:
@@ -57,24 +57,23 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0 # Atau versi terbaru yang kompatibel
+  flutter_lints: ^6.0.0 # Atau versi terbaru yang kompatibel
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
 
-  # To add assets to your application, add an assets section, like this:
+  # Add assets to your application.
   assets:
-    - assets/images/Toyota Camry.jpg
-  #   - images/logo.png # Contoh jika Anda punya folder images di root proyek
-  #   - assets/images/ # Jika Anda ingin memasukkan semua file di dalam folder assets/images/
+    - assets/Logo_Rencar.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

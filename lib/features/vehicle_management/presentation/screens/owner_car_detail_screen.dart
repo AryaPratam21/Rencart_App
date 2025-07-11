@@ -1,36 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart'; // Untuk format tanggal, tambahkan ke pubspec.yaml: intl: ^0.18.1 (atau terbaru)
+import 'package:intl/intl.dart';
+import 'package:rental_mobil_app_flutter/core/constants/app_constants.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/domain/models/vehicle.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/presentation/widgets/view_location_button.dart';
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/owner_vehicle_providers.dart'
+    as vehicle_providers;
+import 'package:rental_mobil_app_flutter/features/vehicle_management/providers/vehicle_booking_providers.dart';
 
 // --- MODEL DATA DUMMY (Hanya untuk contoh UI ini) ---
-class CarDetailVehicle {
-  final String id;
-  final String name;
-  final String licensePlate;
-  final String? vin;
-  final int? mileage;
-  final String location;
-  String status; // Bisa diubah
-  final List<String> imageUrls;
-  final String? transmission;
-  final int? capacity;
-  final String? description;
-
-  CarDetailVehicle({
-    required this.id,
-    required this.name,
-    required this.licensePlate,
-    this.vin,
-    this.mileage,
-    required this.location,
-    required this.status,
-    required this.imageUrls,
-    this.transmission,
-    this.capacity,
-    this.description,
-  });
-}
-
 class CarDetailBooking {
   final String customerName;
   final DateTime startDate;
@@ -46,7 +24,10 @@ class CarDetailBooking {
 // --- PROVIDER LOKAL UNTUK STATUS TERPILIH ---
 // .family digunakan agar setiap instance CarDetailScreen dengan vehicleId berbeda
 // memiliki state statusnya sendiri.
-final _selectedStatusProvider = StateProvider.family<String?, String>((ref, vehicleId) {
+final _selectedStatusProvider = StateProvider.family<String?, String>((
+  ref,
+  vehicleId,
+) {
   // Nilai awal akan di-set saat data mobil dimuat
   return null;
 });
@@ -58,56 +39,51 @@ class OwnerCarDetailScreen extends ConsumerStatefulWidget {
   const OwnerCarDetailScreen({super.key, required this.vehicleId});
 
   @override
-  ConsumerState<OwnerCarDetailScreen> createState() => _OwnerCarDetailScreenState();
+  ConsumerState<OwnerCarDetailScreen> createState() =>
+      _OwnerCarDetailScreenState();
 }
 
 class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
   // Data mobil dummy (GANTI DENGAN PROVIDER APPWRITE ANDA)
-  CarDetailVehicle? _vehicle;
-  List<CarDetailBooking> _bookingHistory = [];
-  bool _isLoading = true;
+  Vehicle? _vehicle;
   String? _errorMessage;
+  bool _isLoading = true;
+  List<CarDetailBooking> _bookingHistory = [];
 
   @override
   void initState() {
     super.initState();
-    _loadCarDetails();
+    _loadVehicleData();
   }
 
-  Future<void> _loadCarDetails() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-    // Simulasi pengambilan data
-    await Future.delayed(const Duration(seconds: 1));
-    if (widget.vehicleId == "car123_demo") {
+  Future<void> _loadVehicleData() async {
+    try {
+      final vehicle = await ref.read(
+        vehicle_providers.vehicleDetailProvider(widget.vehicleId).future,
+      );
       setState(() {
-        _vehicle = CarDetailVehicle(
-          id: "car123_demo",
-          name: "2021 Toyota Camry",
-          licensePlate: "ABC-1234",
-          vin: "1234567890ABCDEFG",
-          mileage: 35000,
-          location: "123 Main St, Anytown",
-          status: "available",
-          imageUrls: ["https://upload.wikimedia.org/wikipedia/commons/thumb/a/ac/2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg/1024px-2018_Toyota_Camry_%28ASV70R%29_Ascent_sedan_%282018-08-27%29_01.jpg"],
-          transmission: "Automatic",
-          capacity: 5,
-          description: "Mobil keluarga yang nyaman dan irit bahan bakar.",
-        );
+        _vehicle = vehicle;
+        // Initialize booking history with dummy data
         _bookingHistory = [
-          CarDetailBooking(customerName: "Ava Carter", startDate: DateTime(2024, 7, 15), endDate: DateTime(2024, 7, 20)),
-          CarDetailBooking(customerName: "Ethan Harper", startDate: DateTime(2024, 6, 10), endDate: DateTime(2024, 6, 12)),
+          CarDetailBooking(
+            customerName: "Ava Carter",
+            startDate: DateTime(2024, 7, 15),
+            endDate: DateTime(2024, 7, 20),
+          ),
+          CarDetailBooking(
+            customerName: "Ethan Harper",
+            startDate: DateTime(2024, 6, 10),
+            endDate: DateTime(2024, 6, 12),
+          ),
         ];
-        // Inisialisasi provider status terpilih dengan status mobil saat ini
-        // setelah data dimuat pertama kali
-        ref.read(_selectedStatusProvider(widget.vehicleId).notifier).state = _vehicle?.status;
+        // Initialize status provider with vehicle status
+        ref.read(_selectedStatusProvider(widget.vehicleId).notifier).state =
+            _vehicle?.status;
         _isLoading = false;
       });
-    } else {
+    } catch (e) {
       setState(() {
-        _errorMessage = "Car not found.";
+        _errorMessage = 'Gagal memuat data mobil: $e';
         _isLoading = false;
       });
     }
@@ -117,47 +93,86 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
     if (_vehicle == null) return;
 
     setState(() {
-      // Menampilkan loading di tombol atau UI lain jika perlu
+      _isLoading = true;
     });
 
-    print("Simulating saving status: $newStatus for vehicle ID: ${widget.vehicleId}");
-    // Simulasi panggilan API
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Jika sukses, update state lokal dan tampilkan pesan
-    setState(() {
-      _vehicle!.status = newStatus; // Update status di objek lokal
-    });
-    ref.read(_selectedStatusProvider(widget.vehicleId).notifier).state = newStatus; // Pastikan provider juga update
-
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Changes saved successfully! (Simulated)')),
+    try {
+      final vehicleService = ref.read(vehicle_providers.vehicleServiceProvider);
+      await vehicleService.updateVehicle(
+        _vehicle!.id!, // ID vehicle
+        _vehicle!.copyWith(status: newStatus), // Vehicle object
       );
-    }
-    // Di aplikasi nyata: Panggil Appwrite service untuk update, lalu refresh data dari Appwrite
-    // ref.invalidate(demoVehicleDetailProvider(widget.vehicleId));
-  }
 
+      setState(() {
+        _vehicle = _vehicle!.copyWith(status: newStatus);
+      });
+      ref.read(_selectedStatusProvider(widget.vehicleId).notifier).state =
+          newStatus;
+
+      ref.invalidate(vehicle_providers.vehicleDetailProvider(widget.vehicleId));
+      ref.invalidate(vehicle_providers.ownerVehiclesProvider);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Perubahan berhasil disimpan!')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final String? selectedStatus = ref.watch(_selectedStatusProvider(widget.vehicleId));
+    final String? selectedStatus = ref.watch(
+      _selectedStatusProvider(widget.vehicleId),
+    );
 
     if (_isLoading) {
       return Scaffold(
         backgroundColor: const Color(0xFF1F2C2E),
-        appBar: AppBar(title: const Text('Car Details', style: TextStyle(color: Colors.white)), backgroundColor: const Color(0xFF1A2426), iconTheme: const IconThemeData(color: Colors.white), elevation: 0),
-        body: const Center(child: CircularProgressIndicator(color: Color(0xFFB2D3A8))),
+        appBar: AppBar(
+          title: const Text(
+            'Detail Mobil',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF1A2426),
+          iconTheme: const IconThemeData(color: Colors.white),
+          elevation: 0,
+        ),
+        body: const Center(
+          child: CircularProgressIndicator(color: Color(0xFFB2D3A8)),
+        ),
       );
     }
 
     if (_errorMessage != null) {
       return Scaffold(
         backgroundColor: const Color(0xFF1F2C2E),
-        appBar: AppBar(title: const Text('Car Details', style: TextStyle(color: Colors.white)), backgroundColor: const Color(0xFF1A2426), iconTheme: const IconThemeData(color: Colors.white), elevation: 0),
-        body: Center(child: Text(_errorMessage!, style: const TextStyle(color: Colors.redAccent, fontSize: 16))),
+        appBar: AppBar(
+          title: const Text(
+            'Detail Mobil',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF1A2426),
+          iconTheme: const IconThemeData(color: Colors.white),
+          elevation: 0,
+        ),
+        body: Center(
+          child: Text(
+            _errorMessage!,
+            style: const TextStyle(color: Colors.redAccent, fontSize: 16),
+          ),
+        ),
       );
     }
 
@@ -165,8 +180,21 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
       // Seharusnya tidak terjadi jika _errorMessage null dan _isLoading false, tapi sebagai fallback
       return Scaffold(
         backgroundColor: const Color(0xFF1F2C2E),
-        appBar: AppBar(title: const Text('Car Details', style: TextStyle(color: Colors.white)), backgroundColor: const Color(0xFF1A2426), iconTheme: const IconThemeData(color: Colors.white), elevation: 0),
-        body: const Center(child: Text("No car data available.", style: TextStyle(color: Colors.white70))),
+        appBar: AppBar(
+          title: const Text(
+            'Detail Mobil',
+            style: TextStyle(color: Colors.white),
+          ),
+          backgroundColor: const Color(0xFF1A2426),
+          iconTheme: const IconThemeData(color: Colors.white),
+          elevation: 0,
+        ),
+        body: const Center(
+          child: Text(
+            "Tidak ada data mobil yang tersedia.",
+            style: TextStyle(color: Colors.white70),
+          ),
+        ),
       );
     }
 
@@ -176,8 +204,11 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFF1F2C2E),
       appBar: AppBar(
-        title: const Text('Car Details', style: TextStyle(color: Colors.white)),
-        backgroundColor: const Color(0xFF1A2426),
+        title: const Text(
+          'Detail Mobil',
+          style: TextStyle(color: Colors.white),
+        ),
+        backgroundColor: const Color(0xFF1A2466),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
@@ -185,23 +216,31 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (car.imageUrls.isNotEmpty)
+            if (car.image_urls.isNotEmpty)
               Image.network(
-                car.imageUrls.first,
+                '${AppConstants.appwriteEndpoint}/storage/buckets/${AppConstants.vehicleImagesBucketId}/files/${car.image_urls.first}/preview',
                 width: double.infinity,
                 height: 250,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: 250,
                   color: Colors.grey[800],
-                  child: const Icon(Icons.broken_image, size: 50, color: Colors.grey),
+                  child: const Icon(
+                    Icons.broken_image,
+                    size: 50,
+                    color: Colors.grey,
+                  ),
                 ),
                 loadingBuilder: (context, child, loadingProgress) {
                   if (loadingProgress == null) return child;
                   return Container(
                     height: 250,
                     color: Colors.grey[800],
-                    child: const Center(child: CircularProgressIndicator(color: Color(0xFFB2D3A8))),
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFFB2D3A8),
+                      ),
+                    ),
                   );
                 },
               )
@@ -209,7 +248,13 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
               Container(
                 height: 250,
                 color: Colors.grey[800],
-                child: const Center(child: Icon(Icons.directions_car, size: 100, color: Colors.grey)),
+                child: const Center(
+                  child: Icon(
+                    Icons.directions_car,
+                    size: 100,
+                    color: Colors.grey,
+                  ),
+                ),
               ),
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -218,38 +263,82 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
                 children: [
                   Text(
                     car.name,
-                    style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  _buildDetailRow('License Plate:', car.licensePlate),
+                  _buildDetailRow('Nomor Polisi:', car.plate_number),
                   if (car.vin != null) _buildDetailRow('VIN:', car.vin!),
-                  if (car.mileage != null) _buildDetailRow('Mileage:', '${NumberFormat.decimalPattern().format(car.mileage)} miles'),
-                  _buildDetailRow('Location:', car.location),
-                  if (car.transmission != null) _buildDetailRow('Transmission:', car.transmission!),
-                  if (car.capacity != null) _buildDetailRow('Capacity:', '${car.capacity} seats'),
-                  if (car.description != null && car.description!.isNotEmpty) ...[
+                  if (car.mileage != null)
+                    _buildDetailRow(
+                      'Jarak Tempuh:',
+                      '${NumberFormat.decimalPattern().format(car.mileage)} mil',
+                    ),
+                  _buildDetailRow('Lokasi:', car.location),
+                  const SizedBox(height: 8),
+                  if (car.location.isNotEmpty)
+                    ViewLocationButton(
+                      latitude: car.latitude,
+                      longitude: car.longitude,
+                      address: car.location,
+                    ),
+                  _buildDetailRow('Transmisi:', car.transmission),
+                  _buildDetailRow('Kapasitas:', '${car.capacity} kursi'),
+                  if (car.description.isNotEmpty) ...[
                     const SizedBox(height: 12),
-                    Text('Description:', style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: Colors.white70)),
+                    Text(
+                      'Deskripsi:',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white70,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(car.description!, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                    Text(
+                      car.description,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
                   ],
 
                   const SizedBox(height: 24),
                   Text(
                     'Status',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Wrap(
                     spacing: 10.0,
-                    children: ['available', 'rented', 'maintenance'].map((statusOption) { // Hanya 3 status seperti di gambar
+                    children: ['available', 'rented', 'maintenance'].map((
+                      statusOption,
+                    ) {
+                      // Hanya 3 status seperti di gambar
                       final isSelected = selectedStatus == statusOption;
                       return ChoiceChip(
-                        label: Text(statusOption.capitalize(), style: TextStyle(color: isSelected ? Colors.black87 : Colors.white70)),
+                        label: Text(
+                          statusOption.capitalize(),
+                          style: TextStyle(
+                            color: isSelected ? Colors.black87 : Colors.white70,
+                          ),
+                        ),
                         selected: isSelected,
                         onSelected: (selected) {
                           if (selected) {
-                            ref.read(_selectedStatusProvider(widget.vehicleId).notifier).state = statusOption;
+                            ref
+                                    .read(
+                                      _selectedStatusProvider(
+                                        widget.vehicleId,
+                                      ).notifier,
+                                    )
+                                    .state =
+                                statusOption;
                           }
                         },
                         selectedColor: const Color(0xFFB2D3A8),
@@ -257,74 +346,176 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(20),
                           side: BorderSide(
-                            color: isSelected ? const Color(0xFFB2D3A8) : const Color(0xFF4A5C5F),
+                            color: isSelected
+                                ? const Color(0xFFB2D3A8)
+                                : const Color(0xFF4A5C5F),
                           ),
                         ),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), // Sesuaikan padding
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ), // Sesuaikan padding
                       );
                     }).toList(),
                   ),
 
+                  const SizedBox(height: 32),
+                  Text(
+                    'Riwayat Pesanan Selesai',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Consumer(
+                    builder: (context, ref, _) {
+                      final bookingsAsync = ref.watch(
+                        vehicleBookingsProvider(widget.vehicleId),
+                      );
+                      return bookingsAsync.when(
+                        data: (bookings) {
+                          if (bookings.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                'Belum ada pesanan selesai untuk mobil ini.',
+                                style: TextStyle(color: Colors.white70),
+                              ),
+                            );
+                          }
+                          return ListView.separated(
+                            shrinkWrap: true,
+                            physics: NeverScrollableScrollPhysics(),
+                            itemCount: bookings.length,
+                            separatorBuilder: (_, __) =>
+                                Divider(color: Colors.white24),
+                            itemBuilder: (context, idx) {
+                              final booking = bookings[idx];
+                              return ListTile(
+                                leading: const Icon(
+                                  Icons.assignment_turned_in,
+                                  color: Colors.greenAccent,
+                                ),
+                                title: Text(
+                                  booking.customerName,
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                                subtitle: Text(
+                                  '${DateFormat('dd MMM yyyy').format(booking.startDate)} - ${DateFormat('dd MMM yyyy').format(booking.endDate)}',
+                                  style: const TextStyle(color: Colors.white70),
+                                ),
+                                trailing: Text(
+                                  'Rp ${booking.totalPrice.toStringAsFixed(0)}',
+                                  style: const TextStyle(color: Colors.white),
+                                ),
+                              );
+                            },
+                          );
+                        },
+                        loading: () =>
+                            const Center(child: CircularProgressIndicator()),
+                        error: (e, st) => Center(
+                          child: Text(
+                            'Gagal memuat data booking',
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+
                   const SizedBox(height: 24),
                   Text(
-                    'Booking History',
-                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white),
+                    'Riwayat Pemesanan',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   if (_bookingHistory.isEmpty)
-                    const Text('No booking history for this car.', style: TextStyle(color: Colors.white70))
+                    const Text(
+                      'Tidak ada riwayat pemesanan untuk mobil ini.',
+                      style: TextStyle(color: Colors.white70),
+                    )
                   else
                     ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: _bookingHistory.length,
-                      separatorBuilder: (context, index) => const Divider(color: Color(0xFF2A3A3D), height: 1),
+                      separatorBuilder: (context, index) =>
+                          const Divider(color: Color(0xFF2A3A3D), height: 1),
                       itemBuilder: (context, index) {
                         final booking = _bookingHistory[index];
                         return ListTile(
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8.0),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8.0,
+                          ),
                           leading: CircleAvatar(
                             radius: 24,
-                            backgroundColor: _getAvatarColor(booking.customerName), // Warna avatar acak sederhana
+                            backgroundColor: _getAvatarColor(
+                              booking.customerName,
+                            ), // Warna avatar acak sederhana
                             child: Text(
-                              booking.customerName.isNotEmpty ? booking.customerName.substring(0,1).toUpperCase() : '?',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                              booking.customerName
+                                  .substring(0, 1)
+                                  .toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
                             ),
                           ),
-                          title: Text(booking.customerName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                          title: Text(
+                            booking.customerName,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           subtitle: Text(
                             '${DateFormat.yMMMd().format(booking.startDate)} - ${DateFormat.yMMMd().format(booking.endDate)}',
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
                           ),
                         );
                       },
                     ),
 
                   const SizedBox(height: 40), // Beri ruang lebih sebelum tombol
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFB2D3A8),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed:
+                        (selectedStatus != null && selectedStatus != car.status)
+                        ? () {
+                            _saveChanges(selectedStatus);
+                          }
+                        : null, // Disable tombol jika status tidak berubah
+                    child: const Text(
+                      'Simpan Perubahan',
+                      style: TextStyle(color: Color(0xFF1F2C2E)),
+                    ),
+                  ),
                 ],
-              ),
-            ),
+              ), // <-- tutup Column children
+            ), // <-- tutup Padding
           ],
-        ),
-      ),
-      bottomNavigationBar: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFFB2D3A8),
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-            textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          onPressed: (selectedStatus != null && selectedStatus != car.status)
-              ? () {
-                  _saveChanges(selectedStatus);
-                }
-              : null, // Disable tombol jika status tidak berubah
-          child: const Text('Save Changes', style: TextStyle(color: Color(0xFF1F2C2E))),
-        ),
-      ),
-    );
+        ), // <-- tutup Column utama
+      ), // <-- tutup SingleChildScrollView
+    ); // <-- tutup Scaffold
   }
 
   Widget _buildDetailRow(String label, String value) {
@@ -333,29 +524,44 @@ class _OwnerCarDetailScreenState extends ConsumerState<OwnerCarDetailScreen> {
       child: Text.rich(
         TextSpan(
           children: [
-            TextSpan(text: '$label ', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white70, fontSize: 14)),
-            TextSpan(text: value, style: const TextStyle(color: Colors.white, fontSize: 14)),
+            TextSpan(
+              text: '$label ',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.white70,
+                fontSize: 14,
+              ),
+            ),
+            TextSpan(
+              text: value,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+            ),
           ],
         ),
       ),
     );
   }
 
-    final List<Color> _avatarColors = [ // Warna untuk avatar dummy
-        Colors.blueGrey, Colors.teal, Colors.indigo, Colors.deepOrange, Colors.brown
-    ];
+  final List<Color> _avatarColors = [
+    // Warna untuk avatar dummy
+    Colors.blueGrey,
+    Colors.teal,
+    Colors.indigo,
+    Colors.deepOrange,
+    Colors.brown,
+  ];
 
-    Color _getAvatarColor(String name) {
-        final hash = name.hashCode;
-        final index = hash % _avatarColors.length;
-        return _avatarColors[index];
-    }
+  Color _getAvatarColor(String name) {
+    final hash = name.hashCode;
+    final index = hash % _avatarColors.length;
+    return _avatarColors[index];
+  }
 }
 
 // Extension untuk capitalize string pertama
 extension StringExtension on String {
-    String capitalize() {
-      if (isEmpty) return this;
-      return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
-    }
+  String capitalize() {
+    if (isEmpty) return this;
+    return "${this[0].toUpperCase()}${substring(1).toLowerCase()}";
+  }
 }
